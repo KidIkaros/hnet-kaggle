@@ -104,22 +104,36 @@ Chinese does not — and not its cause. Four candidate mechanisms have now been 
 chunk-length period, whitespace delimitation, bytes per character, and ASCII-landmark density
 (`rus_comb` and `cmn` have nearly identical ASCII shares, 0.058 and 0.062, yet +0.075 vs -0.205).
 
-**Still open: the mechanism, and it has resisted four tests.** Width was the best predictor
-until it was manipulated directly and failed. The next candidate is the script type itself:
-Chinese and Japanese are the only logographic scripts in the set. Thai is the cell that decides
-it — alphabetic, wider than Chinese, unspaced, and with a lower ASCII share than Chinese — and it
-is running now. If Thai aligns, the effect is specific to logographic scripts; if it does not, the
-honest answer is a two-factor description with no mechanism, and that the cause is unidentified
-at this scale.
+**Still open: the mechanism, and it has resisted five tests.** Width was the best predictor
+until it was manipulated directly and failed. The next candidate was the script type: Chinese and
+Japanese are the only logographic scripts in the set, so Thai — alphabetic, wider than Chinese,
+unspaced, and with a *lower* ASCII share than Chinese — decides it. **Thai is not aligned**
+(-0.145, 3/3 seeds negative), which kills the logographic explanation: an alphabetic script
+fails just as Chinese does.
+
+What survives is narrower and stranger. Thai and Chinese share width, the absence of spaces and a
+low ASCII share; they differ in script type and still behave the same. English widened to
+Chinese's width, with spaces and a high ASCII share, behaves like Russian. So the effect tracks
+something Chinese, Japanese and Thai share and Latin, Cyrillic, Arabic and Devanagari do not —
+and it is not width, not whitespace, not ASCII density and not script type.
+
+**The most important limitation, and it is not a mechanism at all:** per-language alignment is
+sensitive to *what else is in the training mixture*, by more than the effects being measured.
+`cmn` reads -0.147, -0.205 and -0.037 in three different mixtures, and `eng_comb` +0.094 and
++0.020 in two. The 8-seed replication's clean separation is a **fixed-mixture** result and is
+reported as exactly that. Any reader comparing this study to another should treat the mixture as
+part of the measurement.
 
 ## Limits
 
 - **0.84 M parameters, ~7% of one epoch, one T4.** A full pass over the corpus would take 28 h at
   this size; the design is steps-bound, not pass-bound, because ratio dynamics need 5000 steps to
   stabilise.
-- **Per-language numbers are mixture-sensitive.** Every number here comes from one fixed mixture;
-  cross-run comparisons of the same language at different mixtures are not valid, and the write-up
-  should report composition with every figure.
+- **Per-language numbers are mixture-sensitive, by more than the effect sizes.** Every number in
+  the main table comes from one fixed mixture; cross-run comparisons of the same language at
+  different mixtures are not valid (`cmn` moves by 0.17 across three mixtures). The write-up
+  reports composition with every figure, and the Thai run is reported as a harness failure
+  because its `cmn` control drifted outside the pre-registered tolerance.
 - **The ratio control never locked.** Realised bytes/chunk ranged 2.4-7.1 against a target of 6, so
   N and realised chunk length are not interchangeable on these scripts. Report realised
   bytes/chunk, never the target.

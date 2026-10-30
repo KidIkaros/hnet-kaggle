@@ -55,6 +55,10 @@ that trains, generates and reports chunk alignment on a single T4.
 - [Verdict](issues/09-verdict.md) — **untested, with a mechanism inside it**: character structure
   is found on whitespace-delimited 2-byte scripts and lost on CJK. Q2 doesn't follow yet; the
   next run must control (N, character width), which was never swept.
+- [Thai cell](issues/18-thai-cell.md) — **logographic explanation dead** (tha -0.145, 3/3
+  negative). The run also failed its cmn control (-0.205 -> -0.037, sd 0.328), so it is reported
+  as a harness failure first. Dominant finding: per-language alignment moves with the training
+  mixture by more than the effect size (rus stable, cmn not).
 - [Width manipulation](issues/17-width-manipulation.md) — **H1 DEAD.** English at Chinese's exact
   width aligns (+0.094, 4/4) while Chinese at 2.67 does not (-0.205, 4/4). The pre-registered
   falsifier missed by 0.006 on a magnitude threshold, but two of six checks failed. Width,
@@ -97,8 +101,11 @@ that trains, generates and reports chunk alignment on a single T4.
 
 ## Frontier
 
-- **Thai cell (wayfinder:task)** — alphabetic, wider than Chinese, unspaced, lower ASCII share.
-  The last cell that separates "logographic script" from every other explanation.
+- **Thai confirmation seeds (wayfinder:task)** — seeds 3-4 of the identical 4-language mixture:
+  tightens Thai (n=5) and re-tests the `cmn` control that drifted outside tolerance.
+- **The causal question, now well-posed (wayfinder:task)** — what separates cmn/jpn/tha from
+  rus/arb/eng/hin, given that width, whitespace, ASCII density, script type and chunk period have
+  all been refuted. Mixture composition is now a first-class variable and must be controlled.
 
 ## Not yet specified
 

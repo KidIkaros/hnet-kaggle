@@ -17,16 +17,15 @@
   "wd": 0.1,
   "clip": 1.0,
   "seeds": [
-    0,
-    1,
-    2
+    3,
+    4
   ],
   "arms": [
     "hnet"
   ],
   "eval_every": 250,
   "log_every": 25,
-  "wall_guard_s": 10800,
+  "wall_guard_s": 5400,
   "languages": [
     "tha",
     "eng_comb",
@@ -37,5 +36,5 @@
   "sweep_ratios": [
     4.0
   ],
-  "note": "Thai cell: separates logographic script from width/space/ASCII explanations; pre-registered in ticket 18"
+  "note": "Thai cell, seeds 3-4, same 4-language mixture as seeds 0-2: adds n=5 and re-tests the cmn control that failed to reproduce"
 }

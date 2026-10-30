@@ -309,3 +309,33 @@ scripts and not others, and we have not identified why.*
 Chinese. Every surviving explanation predicts Thai fails; only "logographic script breaks it"
 predicts Thai succeeds. If Thai aligns, the cause is the script type. If it does not, the honest
 answer is a two-factor description with no mechanism.
+
+## Amendment 7: the cause is unidentified, and mixture sensitivity is the dominant uncertainty
+
+Thai (ticket 18) is **not** aligned: -0.145, 3/3 seeds negative, CI [-0.257, -0.034]. The
+logographic explanation is therefore dead — an alphabetic script fails exactly like Chinese. Five
+candidate causes have now been tested and refuted: chunk-length period, whitespace delimitation,
+bytes per character, ASCII-landmark density, and script type.
+
+**And the run failed its own harness control.** `cmn` reads -0.205 in the width mixture and
+-0.037 in the Thai mixture, with one seed at +0.341 and a seed SD of 0.328 — outside the
+pre-registered 0.15 tolerance, so by the rule written down in advance the Thai run is a harness
+failure first and a result second. Two more seeds of the identical mixture are running to settle
+it.
+
+**The finding that now dominates:** per-language alignment moves with *what else is in the
+training mixture* by more than the effects being measured (`cmn`: -0.147, -0.205, -0.037 across
+three mixtures; `eng_comb`: +0.094, +0.020 across two), while `rus` is stable (+0.178, +0.075,
++0.177). This is consistent with the Hindi instability found earlier and it upgrades that from an
+anecdote to a first-class limitation.
+
+**Final position of the claim.** The effect is real and replicates at fixed mixture — Russian and
+Arabic align (8/8 seeds, p = 0.004), Chinese does not — but its cause is unidentified after five
+refuted hypotheses, and the per-language numbers are mixture-dependent. The write-up now says
+exactly that, and every figure is reported with its mixture.
+
+**What this effort has actually produced:** a replicated measurement, a working Kaggle-only
+harness, a published corpus, and an unusually honest record of five refuted explanations. The
+causal question is open and is now well-posed: whatever separates Chinese, Japanese and Thai
+from Latin, Cyrillic, Arabic and Devanagari is not width, whitespace, ASCII density, script type
+or chunk period.

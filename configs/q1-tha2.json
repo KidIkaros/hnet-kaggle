@@ -1,0 +1,40 @@
+{
+  "d_model": 128,
+  "n_enc": 2,
+  "n_main": 2,
+  "n_dec": 2,
+  "d_ff": 512,
+  "d_state": 16,
+  "d_conv": 4,
+  "scan_chunk": 64,
+  "target_ratio": 6.0,
+  "alpha": 0.03,
+  "max_steps": 5000,
+  "seq_len": 256,
+  "batch": 16,
+  "lr": 0.001,
+  "warmup": 200,
+  "wd": 0.1,
+  "clip": 1.0,
+  "seeds": [
+    3,
+    4
+  ],
+  "arms": [
+    "hnet"
+  ],
+  "eval_every": 250,
+  "log_every": 25,
+  "wall_guard_s": 5400,
+  "languages": [
+    "tha",
+    "eng_comb",
+    "cmn",
+    "rus"
+  ],
+  "params_target": 840000.0,
+  "sweep_ratios": [
+    4.0
+  ],
+  "note": "Thai cell, seeds 3-4, same 4-language mixture as seeds 0-2: adds n=5 and re-tests the cmn control that failed to reproduce"
+}
