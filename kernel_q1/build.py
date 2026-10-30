@@ -28,9 +28,9 @@ open(os.path.join(OUT, "main.py"), "w").write(out)
 
 json.dump({f"id": f"mauricew/hnet-{tag}", "title": f"hnet {tag}", "code_file": "main.py",
            "language": "python", "kernel_type": "script", "is_private": True,
-           "enable_gpu": True, "enable_tpu": False, "enable_internet": False,
+           "enable_gpu": False, "enable_tpu": False, "enable_internet": False,
            "keywords": [], "dataset_sources": ["mauricew/hnet-multiscript-bytes"],
            "kernel_sources": [], "competition_sources": [], "model_sources": [],
-           "machine_shape": "NvidiaTeslaT4"},
+           },
           open(os.path.join(OUT, "kernel-metadata.json"), "w"), indent=2)
 print("wrote", OUT)

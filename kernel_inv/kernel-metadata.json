@@ -1,0 +1,18 @@
+{
+  "id": "mauricew/hnet-u16-invariance",
+  "title": "hnet u16 invariance",
+  "code_file": "main.py",
+  "language": "python",
+  "kernel_type": "script",
+  "is_private": true,
+  "enable_gpu": false,
+  "enable_tpu": false,
+  "enable_internet": false,
+  "keywords": [],
+  "dataset_sources": [
+    "mauricew/hnet-multiscript-bytes"
+  ],
+  "kernel_sources": [],
+  "competition_sources": [],
+  "model_sources": []
+}

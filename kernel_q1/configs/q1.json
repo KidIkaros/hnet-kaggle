@@ -17,26 +17,25 @@
   "wd": 0.1,
   "clip": 1.0,
   "seeds": [
-    8,
-    9
+    0,
+    1
   ],
   "arms": [
     "hnet"
   ],
   "eval_every": 250,
   "log_every": 25,
-  "wall_guard_s": 5400,
+  "wall_guard_s": 25200,
   "languages": [
-    "eng",
-    "deu",
-    "rus",
     "cmn",
-    "jpn",
+    "cmn_sp3",
+    "cmn_sp6",
+    "rus",
     "arb"
   ],
   "params_target": 840000.0,
   "sweep_ratios": [
     4.0
   ],
-  "note": "seeds 8-9 of the headline 6-language mixture: strengthens the replication table to n=10"
+  "note": "delimiter-landmark test (CPU): cmn vs cmn with a space every 3 or 6 chars; controls rus/arb"
 }
