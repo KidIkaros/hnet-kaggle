@@ -134,6 +134,10 @@ below exists to test.
   object masks; the most directly comparable item to Cartesia's published vision claim.
 - **Code (wayfinder:task, CPU, licensing-dependent)** — syntax alignment in the domain where the
   structure is most explicit.
+- **Dataset scouting (wayfinder:task, DONE)** — live-checked candidates for all four arms with
+  recency, licence, format and a byte-range probe where format mattered; see
+  [ticket 27](issues/27-dataset-scouting.md). Audio starts on `espnet/yodas3` (2026-10-07),
+  Vision I on `athkot/coco-20-synthetic-50k` (2026-10-30), Vision II on a synthetic generator.
 - **BLT-like arm (wayfinder:task, GPU, later)** — the entropy-heuristic boundary rule in the same
   architecture, for a comparison against Cartesia's published claim.
 
