@@ -9,6 +9,15 @@ At 0.84 M parameters, trained 5000 steps on raw bytes with a 1-stage H-Net, the 
 boundaries on UTF-8 **character starts** above chance in Arabic and Russian, and below chance in
 Chinese and Japanese. English and German are structurally unmeasurable on this metric.
 
+**And the alignment does not survive re-encoding.** The same text presented as UTF-16LE, with
+every character at an even byte offset, moves the model to the *wrong* side of the character in
+exactly the scripts where UTF-8 aligned: Russian -0.228 and Arabic -0.326, against UTF-8's
++0.179 and +0.250, with the two encodings agreeing on only 36-46% of boundary characters.
+Chinese flips the other way (UTF-8 -0.153, UTF-16 +0.334). **So what this study measures is a
+property of UTF-8's byte layout, not of characters** — and the cross-script ordering reverses
+between encodings, which means "Russian and Arabic align, Chinese and Japanese do not" is a
+property of the script *x encoding* pair, not of the scripts.
+
 This is a statement about a small model on a fraction of an epoch. It is **not** evidence about
 the compute multipliers, the large-byte regimes, multi-stage H-Nets, or downstream quality — see
 [Limits](#what-this-does-not-show).
@@ -80,16 +89,51 @@ vary):**
 Russian and Arabic are positive in **29 of 29 seeds** across every mixture that contained them.
 Chinese is negative in 16 of 19 and Japanese in 8 of 10. Everything else is at chance or unstable.
 
-**The split is by script, and its cause is not identified.** Bytes per character was the obvious
+**The split is by script, its cause is not identified, and it does not survive re-encoding.** Bytes per character was the obvious
 candidate and it is wrong: an English corpus widened to 2.69 bytes/char — Chinese's exact width,
 same script, same words, same spaces — aligns (+0.094, every seed), while Chinese at 2.67 does
 not (-0.205, every seed). Width, whitespace delimitation, chunk-length period and ASCII-landmark
 density have each been tested and each failed to explain it. The two groups' CIs still separate
 cleanly, so the *effect* is solid; only its cause has escaped every hypothesis thrown at it.
 
+## The invariance test: what we measured is UTF-8, not characters
+
+The pre-registered claim had two stages: alignment above chance **and** survival of re-encoding
+to UTF-16LE. The second stage had never been run until now, and it fails.
+
+Same corpus, same documents, same text, encoded UTF-16LE (every character at an even byte
+offset). A model trained on the UTF-16 bytes is then run on the *same text* as the UTF-8 models,
+and boundary positions are compared in **character space**: a UTF-8 boundary at byte `t` maps to
+the character that byte starts, a UTF-16LE boundary at byte `t'` maps to `t' // 2`. The UTF-8
+side is the ten replication checkpoints.
+
+| script | UTF-8 lift | UTF-16 lift | boundary agreement | char F1 |
+|---|---|---|---|---|
+| eng | +0.000 | +0.038 | 0.388 | 0.556 |
+| rus | **+0.179** | **-0.228** | 0.358 | 0.525 |
+| cmn | -0.153 | **+0.334** | 0.592 | 0.736 |
+| jpn | -0.268 | +0.014 | 0.528 | 0.689 |
+| arb | **+0.250** | **-0.326** | 0.460 | 0.628 |
+
+(The first UTF-16 run trained at N=6 against N=4 UTF-8 checkpoints, a real confound; the table
+above is the matched N=4 run, and the N=6 run agrees on every script except English.)
+
+The metric was audited before the result was believed: in UTF-16LE every character occupies two
+bytes, so character starts are at even offsets — verified on real text. A lift of -0.228 to
+-0.326 therefore means the model places boundaries at **odd** offsets, i.e. *between the two bytes
+of a character*. An all-odd boundary set would score -0.5.
+
+**The consequence is larger than the measurement.** In the scripts where the UTF-8 model aligned
+to characters, the UTF-16 model most strongly avoids them; Chinese, negative in UTF-8, is the
+most positive in UTF-16. The cross-script ordering therefore *reverses* between encodings, which
+means the aligned/not-aligned split is a property of the script-and-encoding pair, not of the
+script. Five mechanism candidates were refuted earlier in this study (chunk-length period,
+whitespace, bytes per character, ASCII-landmark density, script type) — every one of them a
+candidate for **character** alignment. The invariance result says the target was never characters.
+
 ## What we killed
 
-Five readings of this evidence were wrong. All five are recorded because the final claim is only
+Six readings of this evidence were wrong. All six are recorded because the final claim is only
 worth what the number of surviving readings is worth.
 
 1. **An off-by-one in the probe.** The first version compared `bmask[t]` against the lead-ness of
@@ -116,10 +160,16 @@ worth what the number of surviving readings is worth.
    signs. The pre-registered falsifier's magnitude threshold (+0.10) was missed by 0.006, so its
    letter did not fire, but two of six pre-registered checks failed and the substance is refuted.
 
+6. **"The chunker learns characters."** This was the interpretation the whole study rested on,
+   and the invariance test refutes it: in UTF-16LE the model puts boundaries *inside* characters
+   for exactly the scripts where UTF-8 aligned. What survives is the measurement — "boundaries
+   land on UTF-8 character starts in some scripts and not others" — and not the reading.
+
 What survived every test is the **effect** — Russian and Arabic align, 8/8 seeds, p = 0.004;
-Chinese does not — and not its cause. Four candidate mechanisms have now been tested and refuted:
-chunk-length period, whitespace delimitation, bytes per character, and ASCII-landmark density
-(`rus_comb` and `cmn` have nearly identical ASCII shares, 0.058 and 0.062, yet +0.075 vs -0.205).
+Chinese does not — and not its cause, and not its interpretation. Five candidate mechanisms have
+now been tested and refuted: chunk-length period, whitespace delimitation, bytes per character,
+ASCII-landmark density (`rus_comb` and `cmn` have nearly identical ASCII shares, 0.058 and 0.062,
+yet +0.075 vs -0.205), and script type (Thai is alphabetic and fails like Chinese).
 
 **Still open: the mechanism, and it has resisted five tests.** Width was the best predictor
 until it was manipulated directly and failed. The next candidate was the script type: Chinese and

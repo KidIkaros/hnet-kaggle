@@ -14,9 +14,12 @@ At 0.84 M parameters, trained 5000 steps on raw bytes, the chunker places bounda
 character starts above chance in Arabic (+0.266) and Russian (+0.178) — 8/8 seeds positive in
 both, p = 0.004 — and below chance in Chinese (-0.147, 7/8 seeds negative). Japanese is
 unresolved (6/8 negative, p = 0.14). English and German are structurally unmeasurable on this
-metric: 99.6% and 98.5% of their bytes are already lead bytes. The split is **by script**, and its cause is
-not identified: bytes-per-character, whitespace, chunk-length period and ASCII-landmark density
-have each been tested and each failed to explain it.
+metric: 99.6% and 98.5% of their bytes are already lead bytes. **And it does not survive re-encoding**: the same
+text as UTF-16LE moves the model to the wrong side of the character in exactly the scripts where
+UTF-8 aligned (rus -0.228, arb -0.326), and the cross-script ordering reverses. So the measurement
+is a property of UTF-8's byte layout, not of characters — and bytes-per-character, whitespace,
+chunk-length period, ASCII-landmark density and script type have each been tested and each
+failed to explain it.
 
 This is a small-scale result. It is **not** evidence about compute multipliers, the large-byte
 regimes, multi-stage H-Nets, or downstream quality.
