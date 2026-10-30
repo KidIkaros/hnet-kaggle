@@ -4,10 +4,17 @@ Label: `wayfinder:map` · Effort: `hnet-kaggle` · Charted 2026-10-29
 
 ## Destination
 
-A Kaggle-only pipeline that answers **one defensible claim** about learned chunking on
-multilingual bytes — then hardens the model into something reusable. Verdict first,
-artifact second. "Done" = a result table with a stated falsifier and a working checkpoint
-that trains, generates and reports chunk alignment on a single T4.
+A Kaggle-only pipeline that answers **one defensible claim** about learned chunking — first on
+multilingual bytes, then on whether the answer is about language or about serialized data in
+general. Verdict first, artifact second. "Done" = a result table with a stated falsifier, a
+working harness, and a statement of what the finding generalises to.
+
+**The claim has moved twice and is now modality-general.** It started as "the chunker learns
+characters"; the invariance test killed that; the byte-phase analysis replaced it with "learned
+chunking is a byte-phase segmenter, and apparent character alignment is a phase coincidence that
+reverses under re-encoding". That question — *does learned structure track the semantics of the
+data or the layout of its encoding?* — is not about text, which is what the modality expansion
+below exists to test.
 
 ### Notes
 
@@ -116,13 +123,17 @@ that trains, generates and reports chunk alignment on a single T4.
 
 ## Frontier
 
-- **Scale ladder for characters (wayfinder:task, GPU)** — the byte-phase account predicts the
-  phase is set by byte-value discontinuities, which are a property of the script's byte
-  statistics; the open question is whether that phase ever lands on character starts at larger
-  scale, or whether the phase is stable across scale.
-- **Scale ladder for characters (wayfinder:task, GPU)** — 2.6 M parameters, UTF-8 and UTF-16
-  twins, 3 seeds: is the invariance failure a capacity artifact or a property of the architecture?
-  This is the strongest remaining route to a positive claim.
+- **Scale ladder (wayfinder:task, GPU)** — 2.6 M parameters, UTF-8/UTF-16 twins: is the byte
+  phase stable across scale, and does it ever land on characters at larger size?
+- **Vision I, byte-encoded images (wayfinder:task, CPU)** — the same layout-vs-semantics question
+  on images: pixel and row phase against edge alignment, across four encodings of the same pixels.
+- **Audio (wayfinder:task, CPU)** — PCM-LE vs PCM-BE: the same samples with every byte pair
+  swapped. The sharpest single test here — semantic chunking predicts identical boundary times,
+  layout chunking predicts chance agreement.
+- **Vision II, 2D H-Net (wayfinder:task, CPU, most engineering)** — patch chunking against known
+  object masks; the most directly comparable item to Cartesia's published vision claim.
+- **Code (wayfinder:task, CPU, licensing-dependent)** — syntax alignment in the domain where the
+  structure is most explicit.
 - **BLT-like arm (wayfinder:task, GPU, later)** — the entropy-heuristic boundary rule in the same
   architecture, for a comparison against Cartesia's published claim.
 
