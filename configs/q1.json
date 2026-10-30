@@ -1,0 +1,39 @@
+{
+  "d_model": 128,
+  "n_enc": 2,
+  "n_main": 2,
+  "n_dec": 2,
+  "d_ff": 512,
+  "d_state": 16,
+  "d_conv": 4,
+  "scan_chunk": 64,
+  "target_ratio": 6.0,
+  "alpha": 0.03,
+  "max_steps": 5000,
+  "seq_len": 256,
+  "batch": 16,
+  "lr": 0.001,
+  "warmup": 200,
+  "wd": 0.1,
+  "clip": 1.0,
+  "seeds": [
+    0,
+    1
+  ],
+  "arms": [
+    "hnet"
+  ],
+  "eval_every": 250,
+  "log_every": 25,
+  "wall_guard_s": 28800,
+  "languages": [
+    "eng",
+    "deu",
+    "rus",
+    "cmn",
+    "jpn",
+    "arb"
+  ],
+  "params_target": 840000.0,
+  "seeds_run_as": "one kernel per seed (mauricew/hnet-q1-s0, -s1): 3.25 s/step measured > 1.4 estimated, so a single 6 h guard would truncate both below the 5000-step floor"
+}
