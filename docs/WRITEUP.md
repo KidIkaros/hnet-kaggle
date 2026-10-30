@@ -141,21 +141,33 @@ means no preference; below 1 means boundaries avoid that offset, above 1 means t
 | script | encoding | off0 (character start) | off1 | off2 |
 |---|---|---|---|---|
 | eng | UTF-8 | 1.000 | 1.032 | 0.695 |
-| eng | UTF-16 | **0.290** | **1.710** | — |
+| eng | UTF-16 | 0.859 (0.290) | 1.141 (1.710) | — |
 | rus | UTF-8 | **1.400** | 0.507 | 0.681 |
-| rus | UTF-16 | **0.312** | **1.688** | — |
+| rus | UTF-16 | **0.590** (0.312) | **1.410** (1.688) | — |
 | cmn | UTF-8 | 0.569 | **2.347** | 0.184 |
-| cmn | UTF-16 | **1.306** | 0.694 | — |
+| cmn | UTF-16 | **1.325** (1.306) | 0.675 (0.694) | — |
 | jpn | UTF-8 | 0.528 | **2.191** | 0.403 |
-| jpn | UTF-16 | 0.777 | 1.223 | — |
+| jpn | UTF-16 | 0.875 (0.777) | 1.125 (1.223) | — |
 | arb | UTF-8 | **1.474** | 0.408 | 0.754 |
-| arb | UTF-16 | **0.454** | **1.546** | — |
+| arb | UTF-16 | **0.651** (0.454) | **1.349** (1.546) | — |
 
-**The phase is binary.** Every script-and-encoding pair lands either *on* character starts
-(off0 > 1) or *one byte inside* them (off0 < 1, off1 > 1.5). Nothing lands in between. The
-same checkpoints reproduce every earlier character lift — rus UTF-8 off0 = 1.400 against its
-+0.178 lift, cmn UTF-8 off0 = 0.569 against its -0.153 — so this is a restatement of the same
-structure in a unit-free form, not a new measurement.
+UTF-16 entries are the matched-N=4 checkpoints, which are the controlled comparison; the
+parenthesised values come from the earlier N=6 run and are shown because the direction is the
+same while the magnitude is not.
+
+**Where the phase is strong, it takes one of two values.** Russian, Arabic and Chinese land
+clearly either *on* character starts or *one byte inside* them: rus 1.400 in UTF-8 and 0.590 in
+UTF-16, arb 1.474 and 0.651, cmn 0.569 and 1.325. English and Japanese in UTF-16 sit near
+neutral (0.859, 0.875) rather than clearly in either camp — so the honest statement is that the
+phase is strong and two-valued for three of five scripts, not for all of them. The same
+checkpoints reproduce every earlier character lift — rus UTF-8 off0 = 1.400 against its +0.178
+lift, cmn UTF-8 off0 = 0.569 against its -0.153 — so this is a restatement of the same structure
+in a unit-free form, not a new measurement.
+
+**The magnitude is mixture-dependent, the direction is not.** The N=6 UTF-16 checkpoints show a
+sharper phase than the matched N=4 ones (rus 0.312 vs 0.590, arb 0.454 vs 0.651), and every
+direction is unchanged. This is the same mixture sensitivity that has moved magnitudes
+throughout the study; it is why the direction is the claim and the size is not.
 
 **The phase flips with the encoding, in both directions.** Russian and Arabic go from "on
 character starts" in UTF-8 to "one byte inside" in UTF-16; Chinese goes the other way. The phase
@@ -176,6 +188,22 @@ encoding it has never seen — leaves it producing boundaries at a *consistent* 
 collapse from ~3.0 B to 1.2-2.3 B and its boundary rate rises from ~0.30 to ~0.50 per position.
 The phase is a property of the byte content; the length statistics are a property of the
 training, and they do not transfer.
+
+**Replicated at matched N.** The invariance failure now rests on 10 UTF-8 checkpoints crossed
+with 2 UTF-16 seeds, 20 pairings in all, rather than on a single seed:
+
+| script | UTF-8 lift | UTF-16 lift | boundary agreement | sign flips |
+|---|---|---|---|---|
+| rus | **+0.178** ± 0.064 | **-0.165** ± 0.065 | 0.320 | **20/20** |
+| arb | **+0.254** ± 0.101 | **-0.177** ± 0.153 | 0.330 | **20/20** |
+| cmn | -0.153 ± 0.100 | +0.152 ± 0.187 | 0.484 | 10/20 |
+| jpn | -0.161 ± 0.150 | -0.067 ± 0.083 | 0.503 | 10/20 |
+| eng | +0.000 ± 0.000 | -0.059 ± 0.099 | 0.265 | 10/20 |
+
+Russian and Arabic flip sign in **every one of the twenty pairings**. Boundary agreement sits at
+0.27-0.50, against a chance level of roughly 0.25-0.35 for sets of ~50 boundaries in 12 windows,
+so the boundary sets are essentially unrelated across encodings: the same text chunked two ways
+shares almost nothing.
 
 **The positive claim this study ends with.** Learned chunking in a byte-level H-Net is a
 **byte-phase segmenter**. Its apparent alignment to characters is a phase coincidence that

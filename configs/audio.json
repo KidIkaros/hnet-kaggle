@@ -1,0 +1,10 @@
+{
+  "d_model": 128, "n_enc": 2, "n_main": 2, "n_dec": 2, "d_ff": 512,
+  "d_state": 16, "d_conv": 4, "scan_chunk": 64,
+  "target_ratio": 6.0, "alpha": 0.03, "max_steps": 5000,
+  "seq_len": 512, "batch": 16, "lr": 0.001, "warmup": 200, "wd": 0.1, "clip": 1.0,
+  "seeds": [0], "arms": ["pcm16le", "pcm16be", "mulaw", "f32le"],
+  "eval_every": 500, "log_every": 50, "wall_guard_s": 18000,
+  "params_target": 840000.0,
+  "note": "audio arm: same 37.8 min of speech in four byte encodings; LE vs BE is the sharpest test because it changes only byte order"
+}

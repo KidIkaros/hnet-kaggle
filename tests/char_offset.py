@@ -103,7 +103,9 @@ def main():
     u8 = sorted(glob.glob("/home/ikaaros/.hermes/cache/scratch/replres/ckpt-s*-n4.pt")
                 + glob.glob("/home/ikaaros/.hermes/cache/scratch/replres2/ckpt-s*-n4.pt"),
                 key=lambda p: int(re.search(r"ckpt-s(\d+)", p).group(1)))[:4]
-    u16 = sorted(glob.glob("/home/ikaaros/.hermes/cache/scratch/invres/ckpt-u16-s*.pt"))
+    u16_dir = sys.argv[1] if len(sys.argv) > 1 else "/home/ikaaros/.hermes/cache/scratch/invres"
+    u16 = sorted(glob.glob(os.path.join(u16_dir, "ckpt-u16-s*.pt")))
+    print("utf16 checkpoints from", u16_dir)
     print(f"{len(u8)} UTF-8 checkpoints, {len(u16)} UTF-16 checkpoints")
     print("concentration by offset-within-character (1.0 = no preference)\n")
     res = {}
