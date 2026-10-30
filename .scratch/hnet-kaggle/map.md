@@ -66,7 +66,9 @@ that trains, generates and reports chunk alignment on a single T4.
 - [Write-up](issues/16-write-up.md) — `docs/WRITEUP.md`: claim, pre-registered falsifier, setup,
   results with CIs and sign tests, the four killed readings, limits, and what the published
   scaling claims can and cannot be told by this.
-- [Seed replication](issues/15-seed-replication.md) — **H1 CONFIRMED.** 8 seeds, fixed mixture:
+- [Seed replication](issues/15-seed-replication.md) — **n=10.** rus +0.169 and arb +0.250 (0/10
+  seeds negative each), cmn -0.165 (9/10) and jpn -0.155 (8/10). All pre-registered checks pass;
+  the kill criterion (rus/cmn overlap) still not met. Pooled: rus/arb positive in 29/29 seeds. — **H1 CONFIRMED.** 8 seeds, fixed mixture:
   rus +0.178 and arb +0.266 (8/8 positive, p=0.004), cmn -0.147 (7/8 negative), jpn unresolved
   (p=0.14), eng/deu structural zero. Kill criterion (rus/cmn overlap) not met. Seed noise
   dominates eval noise.
@@ -101,11 +103,11 @@ that trains, generates and reports chunk alignment on a single T4.
 
 ## Frontier
 
-- **Seeds 8-9 of the headline mixture (wayfinder:task)** — running; takes the primary table to
-  n=10.
 - **The causal question, now well-posed (wayfinder:task)** — what separates cmn/jpn/tha from
   rus/arb/eng/hin, given that width, whitespace, ASCII density, script type and chunk period have
   all been refuted. Mixture composition is now a first-class variable and must be controlled.
+  Not reachable in this effort's remaining quota; the harness, corpus and metric are published
+  so it can be picked up.
 
 ## Not yet specified
 

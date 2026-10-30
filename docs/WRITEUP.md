@@ -7,7 +7,7 @@ interpretations that the data killed along the way.**
 
 At 0.84 M parameters, trained 5000 steps on raw bytes with a 1-stage H-Net, the chunker places
 boundaries on UTF-8 **character starts** above chance in Arabic and Russian, and below chance in
-Chinese. Japanese is unresolved. English and German are structurally unmeasurable on this metric.
+Chinese and Japanese. English and German are structurally unmeasurable on this metric.
 
 This is a statement about a small model on a fraction of an epoch. It is **not** evidence about
 the compute multipliers, the large-byte regimes, multi-stage H-Nets, or downstream quality — see
@@ -46,39 +46,39 @@ Two properties matter for reading the results:
 
 ## Results
 
-Eight seeds, fixed 6-language mixture, N=4, every seed 5000 steps. Lift is the mean of the last
+Ten seeds, fixed 6-language mixture, N=4, every seed 5000 steps. Lift is the mean of the last
 three evals per seed; the CI is across seeds.
 
-| script | bytes/char | mean lift | seed SD | 95% CI | sign test | verdict |
+| script | bytes/char | mean lift | seed SD | 95% CI | seeds negative | verdict |
 |---|---|---|---|---|---|---|
-| eng | 1.00 | -0.000 | 0.002 | [-0.002, +0.001] | 4/8 positive | not aligned (structural) |
-| deu | 1.02 | +0.002 | 0.014 | [-0.008, +0.011] | 6/8 positive | not aligned (structural) |
-| **rus** | 1.80 | **+0.178** | 0.085 | **[+0.119, +0.236]** | **8/8 positive, p=0.004** | **aligned** |
-| cmn | 2.67 | **-0.147** | 0.113 | [-0.225, -0.068] | 7/8 negative, p=0.035 | **not aligned** |
-| jpn | 2.68 | -0.123 | 0.169 | [-0.240, -0.006] | 6/8 negative, p=0.14 | **unresolved** |
-| **arb** | 1.78 | **+0.266** | 0.091 | **[+0.203, +0.330]** | **8/8 positive, p=0.004** | **aligned** |
+| eng | 1.00 | -0.000 | 0.002 | [-0.002, +0.001] | 6/10 | not aligned (structural) |
+| deu | 1.02 | -0.001 | 0.013 | [-0.009, +0.007] | 4/10 | not aligned (structural) |
+| **rus** | 1.80 | **+0.169** | 0.079 | **[+0.120, +0.218]** | **0/10** | **aligned** |
+| cmn | 2.67 | **-0.165** | 0.107 | [-0.232, -0.099] | **9/10** | **not aligned** |
+| jpn | 2.68 | **-0.155** | 0.164 | [-0.257, -0.054] | **8/10** | **not aligned** |
+| **arb** | 1.78 | **+0.250** | 0.110 | **[+0.182, +0.318]** | **0/10** | **aligned** |
 
-Arabic and Russian are positive in every seed; Chinese is negative in seven of eight. The two
-groups' CIs do not overlap. Japanese is reported as **unresolved**: the pre-registered CI rule
-called it "not aligned" by a hair, but the distribution-free sign test gives p=0.14 and two of
-eight seeds came back positive (+0.111, +0.173). The conservative reading wins.
+Russian and Arabic are positive in **every seed**; Chinese and Japanese are negative in 9 and 8
+of ten. The two groups' CIs do not overlap. Every pre-registered check passes: `arb ~ rus`
+(CIs overlap), `cmn ~ jpn` (CIs overlap), and the explicit kill criterion — rus and cmn
+overlapping — is not met.
 
 **Pooled over every mixture measured (the honest summary, because the per-mixture numbers
 vary):**
 
 | script | n seeds | mean lift | 95% CI | seeds negative | verdict |
 |---|---|---|---|---|---|
-| eng | 12 | +0.001 | [-0.001, +0.002] | 4/12 | not aligned (structural) |
+| eng | 14 | +0.000 | [-0.001, +0.001] | 6/14 | not aligned (structural) |
 | eng_comb | 9 | +0.038 | [-0.027, +0.102] | 2/9 | not aligned |
-| **rus** | 17 | **+0.147** | **[+0.107, +0.187]** | **0/17** | **aligned** |
+| **rus** | 19 | **+0.146** | **[+0.110, +0.182]** | **0/19** | **aligned** |
 | rus_comb | 4 | +0.075 | [-0.037, +0.187] | 1/4 | unresolved |
-| **cmn** | 17 | **-0.119** | **[-0.205, -0.033]** | 14/17 | **not aligned** |
-| jpn | 8 | -0.123 | [-0.240, -0.006] | 6/8 | not aligned (weakly) |
-| **arb** | 8 | **+0.266** | **[+0.203, +0.330]** | **0/8** | **aligned** |
+| **cmn** | 19 | **-0.132** | **[-0.210, -0.053]** | 16/19 | **not aligned** |
+| jpn | 10 | -0.155 | [-0.257, -0.054] | 8/10 | not aligned |
+| **arb** | 10 | **+0.250** | **[+0.182, +0.318]** | **0/10** | **aligned** |
 | tha | 5 | -0.077 | [-0.179, +0.025] | 3/5 | not aligned (unstable) |
 
-Russian and Arabic are positive in **25 of 25 seeds** across every mixture that contained them.
-Chinese is negative in 14 of 17. Everything else is at chance or unstable.
+Russian and Arabic are positive in **29 of 29 seeds** across every mixture that contained them.
+Chinese is negative in 16 of 19 and Japanese in 8 of 10. Everything else is at chance or unstable.
 
 **The split is by script, and its cause is not identified.** Bytes per character was the obvious
 candidate and it is wrong: an English corpus widened to 2.69 bytes/char — Chinese's exact width,

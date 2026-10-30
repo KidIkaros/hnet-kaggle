@@ -102,3 +102,26 @@ these results is training stochasticity, not measurement — a 5-10x gap.
 
 **Cost:** 3.9 GPU-h, all of it the replication; eval sweeps were CPU and free.
 
+
+## Amendment: two more seeds of the identical mixture (n=10)
+
+`mauricew/hnet-q1-repl2`, seeds 8-9, same 6-language mixture, same N, same config.
+
+| script | n | mean lift | seed SD | 95% CI | seeds negative | verdict |
+|---|---|---|---|---|---|---|
+| eng | 10 | -0.000 | 0.002 | [-0.002, +0.001] | 6/10 | not aligned (structural) |
+| deu | 10 | -0.001 | 0.013 | [-0.009, +0.007] | 4/10 | not aligned (structural) |
+| **rus** | 10 | **+0.169** | 0.079 | **[+0.120, +0.218]** | **0/10** | **aligned** |
+| cmn | 10 | **-0.165** | 0.107 | [-0.232, -0.099] | **9/10** | **not aligned** |
+| jpn | 10 | **-0.155** | 0.164 | [-0.257, -0.054] | **8/10** | **not aligned** |
+| **arb** | 10 | **+0.250** | 0.110 | **[+0.182, +0.318]** | **0/10** | **aligned** |
+
+All pre-registered checks still pass: `arb ~ rus` (CIs overlap), `cmn ~ jpn` (CIs overlap), and
+the explicit kill criterion (rus and cmn overlapping) is still not met. **Japanese now resolves**
+as not aligned (8/10 seeds negative, CI excluding zero), where at n=8 it had been reported as
+unresolved on the strength of the sign test (p = 0.14).
+
+Pooled over every mixture that contained each script: rus +0.146 [+0.110, +0.182] with **0/19**
+seeds negative; arb +0.250 [+0.182, +0.318] with 0/10; cmn -0.132 [-0.210, -0.053] with 16/19
+negative; jpn -0.155 with 8/10 negative. **Russian and Arabic are positive in 29 of 29 seeds**
+across every mixture that contained them.

@@ -10,6 +10,7 @@ import statistics as st
 
 ARMS = ["eng", "eng_comb", "rus", "rus_comb", "cmn", "jpn", "arb", "tha", "hin"]
 DIRS = ["/home/ikaaros/.hermes/cache/scratch/replres",
+        "/home/ikaaros/.hermes/cache/scratch/replres2",
         "/home/ikaaros/.hermes/cache/scratch/widthres",
         "/home/ikaaros/.hermes/cache/scratch/thares",
         "/home/ikaaros/.hermes/cache/scratch/thares2"]
@@ -27,7 +28,7 @@ def lifts(ev, arm):
 pool = {a: [] for a in ARMS}
 per_mix = {}
 for d in DIRS:
-    tag = d.rsplit("/", 1)[-1]
+    tag = "replres" if "replres" in d else d.rsplit("/", 1)[-1]
     for f in sorted(glob.glob(d + "/seed-s*.json")):
         b = json.load(open(f))
         if not b.get("evals"):

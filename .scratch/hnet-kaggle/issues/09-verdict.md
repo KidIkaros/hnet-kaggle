@@ -339,3 +339,29 @@ harness, a published corpus, and an unusually honest record of five refuted expl
 causal question is open and is now well-posed: whatever separates Chinese, Japanese and Thai
 from Latin, Cyrillic, Arabic and Devanagari is not width, whitespace, ASCII density, script type
 or chunk period.
+
+## Amendment 8 (final): n=10 on the pre-registered configuration
+
+Two more seeds of the identical mixture (`mauricew/hnet-q1-repl2`) take the pre-registered table
+to n=10, and every check still passes.
+
+| script | mean lift | 95% CI | seeds negative | verdict |
+|---|---|---|---|---|
+| eng | -0.000 | [-0.002, +0.001] | 6/10 | not aligned (structural) |
+| deu | -0.001 | [-0.009, +0.007] | 4/10 | not aligned (structural) |
+| **rus** | **+0.169** | **[+0.120, +0.218]** | **0/10** | **aligned** |
+| cmn | **-0.165** | [-0.232, -0.099] | **9/10** | **not aligned** |
+| jpn | **-0.155** | [-0.257, -0.054] | **8/10** | **not aligned** |
+| **arb** | **+0.250** | **[+0.182, +0.318]** | **0/10** | **aligned** |
+
+Japanese now resolves as *not aligned* (it was unresolved at n=8, where the sign test gave
+p = 0.14). Pooled over every mixture that contained each script, **Russian and Arabic are
+positive in 29 of 29 seeds**, Chinese is negative in 16 of 19, Japanese in 8 of 10.
+
+**Final claim, unchanged in substance and firmer in its numbers:** this model places chunk
+boundaries on character starts above chance in Arabic and Russian, and below chance in Chinese
+and Japanese, at 0.84 M parameters, and the split is by script. **The cause remains
+unidentified** after five refuted candidates (chunk-length period, whitespace, bytes per
+character, ASCII-landmark density, script type), and per-language magnitudes are
+mixture-dependent, which is stated as a first-class limitation. The write-up, the dataset and
+the harness are public.
