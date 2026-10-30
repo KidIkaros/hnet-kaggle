@@ -63,6 +63,23 @@ groups' CIs do not overlap. Japanese is reported as **unresolved**: the pre-regi
 called it "not aligned" by a hair, but the distribution-free sign test gives p=0.14 and two of
 eight seeds came back positive (+0.111, +0.173). The conservative reading wins.
 
+**Pooled over every mixture measured (the honest summary, because the per-mixture numbers
+vary):**
+
+| script | n seeds | mean lift | 95% CI | seeds negative | verdict |
+|---|---|---|---|---|---|
+| eng | 12 | +0.001 | [-0.001, +0.002] | 4/12 | not aligned (structural) |
+| eng_comb | 9 | +0.038 | [-0.027, +0.102] | 2/9 | not aligned |
+| **rus** | 17 | **+0.147** | **[+0.107, +0.187]** | **0/17** | **aligned** |
+| rus_comb | 4 | +0.075 | [-0.037, +0.187] | 1/4 | unresolved |
+| **cmn** | 17 | **-0.119** | **[-0.205, -0.033]** | 14/17 | **not aligned** |
+| jpn | 8 | -0.123 | [-0.240, -0.006] | 6/8 | not aligned (weakly) |
+| **arb** | 8 | **+0.266** | **[+0.203, +0.330]** | **0/8** | **aligned** |
+| tha | 5 | -0.077 | [-0.179, +0.025] | 3/5 | not aligned (unstable) |
+
+Russian and Arabic are positive in **25 of 25 seeds** across every mixture that contained them.
+Chinese is negative in 14 of 17. Everything else is at chance or unstable.
+
 **The split is by script, and its cause is not identified.** Bytes per character was the obvious
 candidate and it is wrong: an English corpus widened to 2.69 bytes/char — Chinese's exact width,
 same script, same words, same spaces — aligns (+0.094, every seed), while Chinese at 2.67 does
@@ -119,10 +136,18 @@ and it is not width, not whitespace, not ASCII density and not script type.
 
 **The most important limitation, and it is not a mechanism at all:** per-language alignment is
 sensitive to *what else is in the training mixture*, by more than the effects being measured.
-`cmn` reads -0.147, -0.205 and -0.037 in three different mixtures, and `eng_comb` +0.094 and
-+0.020 in two. The 8-seed replication's clean separation is a **fixed-mixture** result and is
-reported as exactly that. Any reader comparing this study to another should treat the mixture as
-part of the measurement.
+`cmn` reads -0.205, -0.147, -0.037 and +0.040 across four mixtures; `eng_comb` +0.094, +0.020 and
+-0.047 across three; `tha` -0.145 and +0.025 across two. The mixture does not only shift the
+mean, it changes the **variance** — `cmn`'s seed SD runs from 0.030 to 0.328 — and it changes
+which arms are present at all. The 8-seed replication's clean separation is a **fixed-mixture**
+result and is reported as exactly that. Any reader comparing this study to another should treat
+the mixture as part of the measurement, and should prefer the pooled sign counts
+(25/25 for rus and arb) over any single mixture's magnitude.
+
+This also weakens one earlier reading: `eng_comb` pooled over three mixtures is +0.038 with a CI
+spanning zero, so "English at Chinese width aligns" is **not** supported either. What the
+manipulation does establish is the asymmetry that matters — English at 2.69 B/char does not show
+Chinese's negative result (-0.119 pooled, 14/17 seeds), so width cannot be the cause.
 
 ## Limits
 

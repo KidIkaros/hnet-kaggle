@@ -83,3 +83,29 @@ measured:
 
 Budget: ~1.7 GPU-h for the three seeds, plus ~1.3 h for the two confirmation seeds.
 
+
+## Amendment: n=5 merged (seeds 0-4, identical 4-language mixture)
+
+| arm | n | mean | sd | 95% CI | per-seed | verdict |
+|---|---|---|---|---|---|---|
+| tha | 5 | -0.077 | 0.117 | [-0.179, +0.025] | -0.244, -0.144, -0.048, +0.027, +0.024 | not aligned (unstable) |
+| eng_comb | 5 | -0.007 | 0.109 | [-0.103, +0.089] | +0.141, +0.045, -0.127, -0.098, +0.004 | not aligned |
+| cmn | 5 | -0.006 | **0.288** | [-0.259, +0.247] | +0.341, -0.249, -0.203, +0.275, -0.194 | not aligned (harness drift) |
+| rus | 5 | +0.156 | 0.074 | [+0.092, +0.221] | +0.287, +0.131, +0.114, +0.114, +0.135 | **aligned** |
+
+The two extra seeds **do not rescue the control**: `cmn` stays out of tolerance (diff +0.199 vs
+the earlier -0.205), with two of five seeds strongly positive and a seed SD of 0.288. `rus`
+reproduces cleanly (+0.156 vs +0.178, diff 0.022). So the harness verdict stands: **this run is
+reported as a harness failure first and a result second**, and Thai's own number is described as
+*not aligned but unstable* rather than as a clean negative.
+
+Pooled over every mixture measured (`tests/pooled_analysis.py`): tha -0.077 [-0.179, +0.025]
+(n=5, CI includes zero), eng_comb +0.038 [-0.027, +0.102] (n=9), rus +0.147 [+0.107, +0.187]
+(n=17, 0/17 negative), cmn -0.119 [-0.205, -0.033] (n=17, 14/17 negative), arb +0.266
+[+0.203, +0.330] (n=8, 0/8 negative).
+
+Two consequences: (a) **Russian and Arabic are positive in 25 of 25 seeds** across every mixture
+that contained them, which is the study's most robust result; (b) "English at Chinese width
+aligns" is **not** supported either — eng_comb pooled is +0.038 with a CI spanning zero. The
+width manipulation still falsifies width as the cause, but via the asymmetry (English at 2.69
+does not show Chinese's negative result) rather than via a clean positive.

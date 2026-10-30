@@ -101,8 +101,8 @@ that trains, generates and reports chunk alignment on a single T4.
 
 ## Frontier
 
-- **Thai confirmation seeds (wayfinder:task)** — seeds 3-4 of the identical 4-language mixture:
-  tightens Thai (n=5) and re-tests the `cmn` control that drifted outside tolerance.
+- **Seeds 8-9 of the headline mixture (wayfinder:task)** — running; takes the primary table to
+  n=10.
 - **The causal question, now well-posed (wayfinder:task)** — what separates cmn/jpn/tha from
   rus/arb/eng/hin, given that width, whitespace, ASCII density, script type and chunk period have
   all been refuted. Mixture composition is now a first-class variable and must be controlled.

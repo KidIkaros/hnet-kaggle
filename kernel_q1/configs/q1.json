@@ -17,8 +17,8 @@
   "wd": 0.1,
   "clip": 1.0,
   "seeds": [
-    3,
-    4
+    8,
+    9
   ],
   "arms": [
     "hnet"
@@ -27,14 +27,16 @@
   "log_every": 25,
   "wall_guard_s": 5400,
   "languages": [
-    "tha",
-    "eng_comb",
+    "eng",
+    "deu",
+    "rus",
     "cmn",
-    "rus"
+    "jpn",
+    "arb"
   ],
   "params_target": 840000.0,
   "sweep_ratios": [
     4.0
   ],
-  "note": "Thai cell, seeds 3-4, same 4-language mixture as seeds 0-2: adds n=5 and re-tests the cmn control that failed to reproduce"
+  "note": "seeds 8-9 of the headline 6-language mixture: strengthens the replication table to n=10"
 }
