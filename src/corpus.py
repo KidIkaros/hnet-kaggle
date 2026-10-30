@@ -25,6 +25,9 @@ SOURCES = {
     # 3-byte AND whitespace-delimited: separates character width from word delimitation,
     # which are confounded across the six Q1 languages.
     "hin": ("FineWeb2-HQ-Plus", "hin_Deva/000_00000.parquet"),
+    # alphabetic, wide (2.82 B/char), unspaced (5%), lowest ASCII share of all --
+    # the cell that separates "logographic script" from every other explanation.
+    "tha": ("FineWeb2-HQ-Plus", "tha_Thai/000_00000.parquet"),
     "eng": ("FineWeb-HQ", "data/CC-MAIN-2024-51/000_00000.parquet"),
 }
 

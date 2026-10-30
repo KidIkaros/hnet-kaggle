@@ -20,29 +20,24 @@
     0,
     1,
     2,
-    3,
-    4,
-    5,
-    6,
-    7
+    3
   ],
   "arms": [
     "hnet"
   ],
   "eval_every": 250,
   "log_every": 25,
-  "wall_guard_s": 28800,
+  "wall_guard_s": 21600,
   "languages": [
     "eng",
-    "deu",
+    "eng_comb",
     "rus",
-    "cmn",
-    "jpn",
-    "arb"
+    "rus_comb",
+    "cmn"
   ],
   "params_target": 840000.0,
   "sweep_ratios": [
     4.0
   ],
-  "note": "seed replication, fixed 6-language mixture, N=4, 8 seeds; pre-registered in ticket 15"
+  "note": "width manipulation: same text and script, bytes/char manipulated; pre-registered in ticket 17"
 }

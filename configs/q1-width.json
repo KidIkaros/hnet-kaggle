@@ -1,0 +1,43 @@
+{
+  "d_model": 128,
+  "n_enc": 2,
+  "n_main": 2,
+  "n_dec": 2,
+  "d_ff": 512,
+  "d_state": 16,
+  "d_conv": 4,
+  "scan_chunk": 64,
+  "target_ratio": 6.0,
+  "alpha": 0.03,
+  "max_steps": 5000,
+  "seq_len": 256,
+  "batch": 16,
+  "lr": 0.001,
+  "warmup": 200,
+  "wd": 0.1,
+  "clip": 1.0,
+  "seeds": [
+    0,
+    1,
+    2,
+    3
+  ],
+  "arms": [
+    "hnet"
+  ],
+  "eval_every": 250,
+  "log_every": 25,
+  "wall_guard_s": 21600,
+  "languages": [
+    "eng",
+    "eng_comb",
+    "rus",
+    "rus_comb",
+    "cmn"
+  ],
+  "params_target": 840000.0,
+  "sweep_ratios": [
+    4.0
+  ],
+  "note": "width manipulation: same text and script, bytes/char manipulated; pre-registered in ticket 17"
+}
