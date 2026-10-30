@@ -16,10 +16,16 @@ both, p = 0.004 — and below chance in Chinese (-0.147, 7/8 seeds negative). Ja
 unresolved (6/8 negative, p = 0.14). English and German are structurally unmeasurable on this
 metric: 99.6% and 98.5% of their bytes are already lead bytes. **And it does not survive re-encoding**: the same
 text as UTF-16LE moves the model to the wrong side of the character in exactly the scripts where
-UTF-8 aligned (rus -0.228, arb -0.326), and the cross-script ordering reverses. So the measurement
-is a property of UTF-8's byte layout, not of characters — and bytes-per-character, whitespace,
-chunk-length period, ASCII-landmark density and script type have each been tested and each
-failed to explain it.
+UTF-8 aligned (rus -0.228, arb -0.326), and the cross-script ordering reverses.
+
+Bucketing every byte by its **offset within its character** shows why. The chunker places
+boundaries at a *byte phase* that is either on character starts or one byte inside them, and
+which one it is depends on the script **and** the encoding — in UTF-8 Russian and Arabic are on
+character starts while Chinese is one byte in; in UTF-16LE it is exactly reversed. **Learned
+chunking is a byte-phase segmenter, and the router keys on byte-value discontinuities rather
+than on characters.** Bytes-per-character, whitespace, chunk-length period, ASCII-landmark
+density and script type have each been tested and each failed to explain the character
+alignment — because the target was never characters.
 
 This is a small-scale result. It is **not** evidence about compute multipliers, the large-byte
 regimes, multi-stage H-Nets, or downstream quality.

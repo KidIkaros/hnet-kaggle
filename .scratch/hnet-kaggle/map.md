@@ -55,6 +55,19 @@ that trains, generates and reports chunk alignment on a single T4.
 - [Verdict](issues/09-verdict.md) — **untested, with a mechanism inside it**: character structure
   is found on whitespace-delimited 2-byte scripts and lost on CJK. Q2 doesn't follow yet; the
   next run must control (N, character width), which was never swept.
+- [Encoding invariance](issues/19-encoding-invariance-test.md) — **stage two of the pre-registered
+  claim FAILS.** In UTF-16LE the model puts boundaries *inside* characters for exactly the scripts
+  where UTF-8 aligned (rus -0.228, arb -0.326), and the cross-script ordering reverses. What we
+  measured is a property of UTF-8's byte layout, not of characters.
+- [Byte-phase analysis](issues/21-byte-phase.md) — **the positive claim.** Boundaries sit at a
+  byte phase that is either on character starts or one byte inside them, and which one depends on
+  the script AND the encoding (Russian/Arabic on-starts in UTF-8, one-byte-in in UTF-16; Chinese
+  the reverse). Zero-training transfer keeps the phase and loses the chunk length. Learned
+  chunking is a byte-phase segmenter.
+- [Scale ladder](issues/22-scale-ladder.md) — with characters refuted, measure what the
+  chunker does learn: offset-phase concentration and zero-training encoding transfer.
+- [Scale ladder](issues/22-scale-ladder.md) — is the invariance failure a capacity artifact? 2.6 M
+  parameters, UTF-8/UTF-16 twins.
 - [Thai cell](issues/18-thai-cell.md) — **logographic explanation dead** (tha -0.145, 3/3
   negative). The run also failed its cmn control (-0.205 -> -0.037, sd 0.328), so it is reported
   as a harness failure first. Dominant finding: per-language alignment moves with the training
@@ -103,11 +116,15 @@ that trains, generates and reports chunk alignment on a single T4.
 
 ## Frontier
 
-- **The causal question, now well-posed (wayfinder:task)** — what separates cmn/jpn/tha from
-  rus/arb/eng/hin, given that width, whitespace, ASCII density, script type and chunk period have
-  all been refuted. Mixture composition is now a first-class variable and must be controlled.
-  Not reachable in this effort's remaining quota; the harness, corpus and metric are published
-  so it can be picked up.
+- **Scale ladder for characters (wayfinder:task, GPU)** — the byte-phase account predicts the
+  phase is set by byte-value discontinuities, which are a property of the script's byte
+  statistics; the open question is whether that phase ever lands on character starts at larger
+  scale, or whether the phase is stable across scale.
+- **Scale ladder for characters (wayfinder:task, GPU)** — 2.6 M parameters, UTF-8 and UTF-16
+  twins, 3 seeds: is the invariance failure a capacity artifact or a property of the architecture?
+  This is the strongest remaining route to a positive claim.
+- **BLT-like arm (wayfinder:task, GPU, later)** — the entropy-heuristic boundary rule in the same
+  architecture, for a comparison against Cartesia's published claim.
 
 ## Not yet specified
 
