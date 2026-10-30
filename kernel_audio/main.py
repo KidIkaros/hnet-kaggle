@@ -1,3 +1,4 @@
+import sys
 import json
 import math
 import os
@@ -373,11 +374,17 @@ import torch.nn.functional as F
 OUT = os.environ.get("OUT_DIR", "/kaggle/working")
 CFG = json.load(open(os.environ.get("CONFIG", "/tmp/audio.json")))
 DATA = os.environ.get("DATA")
-for root in (() if DATA else ("/kaggle/input/hnet-audio-bytes/corpus",
+for root in (() if DATA else ("/kaggle/input/datasets/mauricew/hnet-audio-bytes",
+                              "/kaggle/input/hnet-audio-bytes",
+                              "/kaggle/input/hnet-audio-bytes/corpus",
              "/kaggle/input/datasets/mauricew/hnet-audio-bytes/corpus", "corpus")):
     if os.path.isdir(root):
         DATA = root
         break
+if not DATA:
+    import glob
+    print("INPUT:", glob.glob("/kaggle/input/*")[:20], glob.glob("/kaggle/input/datasets/*/*")[:30], flush=True)
+    print("CWD:", os.getcwd(), sorted(os.listdir("."))[:20], flush=True)
 assert DATA, "audio dataset not mounted"
 os.makedirs(OUT, exist_ok=True)
 DEV = "cuda" if torch.cuda.is_available() else "cpu"
@@ -402,8 +409,14 @@ ARMS = CFG["arms"]                      # e.g. ["pcm16le", "pcm16be", "mulaw", "
 BPS = {k: v["bytes_per_sample"] for k, v in META["encodings"].items()}
 SEQ = {k: v["seq_len_for_32ms"] for k, v in META["encodings"].items()}
 
-# val is the last 15% of the stream, taken in whole documents where possible
-VAL_START = int(N * 0.85)
+# N is a SAMPLE count; every byte offset must be scaled by the arm's bytes-per-sample.
+# Using N directly as a byte offset reads only the first half of the pcm16le stream.
+def nbytes(arm):
+    return N * BPS[arm]
+
+
+def val_start(arm):
+    return int(N * 0.85) * BPS[arm]
 _onsets = np.fromfile(os.path.join(DATA, "onsets.u32"), dtype="<u4").astype(np.int64)
 ONSETS = np.sort(_onsets[_onsets < N])
 
@@ -435,8 +448,8 @@ def windows(arm, n_windows, seq_len, start, end):
 def onset_lift(bmask, base_byte, arm, tol_ms=8):
     """Fraction of boundaries within tol of an onset, against the base rate of such positions."""
     bps = BPS[arm]
-    tol = int(tol_ms * SR / 1000) * bps
-    pos = np.flatnonzero(bmask) + base_byte
+    tol = int(tol_ms * SR / 1000)                  # tolerance in SAMPLES, like ONSETS
+    pos = (np.flatnonzero(bmask) + base_byte) // bps   # byte offset -> sample index
     if len(pos) == 0:
         return None
     idx = np.searchsorted(ONSETS, pos)
@@ -445,7 +458,7 @@ def onset_lift(bmask, base_byte, arm, tol_ms=8):
     d = np.minimum(np.abs(pos - ONSETS[lo]), np.abs(ONSETS[hi] - pos))
     hit = float(np.mean(d <= tol))
     # base rate: same question asked of every sample-aligned position in the window
-    allpos = np.arange(base_byte, base_byte + len(bmask), bps)
+    allpos = np.arange(base_byte, base_byte + len(bmask), bps) // bps
     i2 = np.searchsorted(ONSETS, allpos)
     l2 = np.clip(i2 - 1, 0, len(ONSETS) - 1)
     h2 = np.clip(i2, 0, len(ONSETS) - 1)
@@ -468,7 +481,7 @@ def evaluate(model, arm, seq_len, n_windows=10):
     model.eval()
     rows = []
     with torch.no_grad():
-        for b in windows(arm, n_windows, seq_len, VAL_START, N):
+        for b in windows(arm, n_windows, seq_len, val_start(arm), nbytes(arm)):
             arr = np.frombuffer(raw[b:b + seq_len + 1], np.uint8).astype(np.int64)
             x = torch.from_numpy(arr)[None, :].to(DEV)
             logits, aux = model(x[:, :-1])
@@ -500,7 +513,6 @@ def train_arm(arm, seed, deadline):
     torch.manual_seed(seed)
     np.random.seed(seed)
     fields = {k: v for k, v in CFG.items() if k in HNetConfig.__dataclass_fields__}
-    fields["seq_len"] = seq_len
     cfg = HNetConfig(**fields)
     model = HNetLM(cfg).to(DEV)
     init_weights(model)
@@ -508,7 +520,7 @@ def train_arm(arm, seed, deadline):
                             betas=(0.9, 0.95))
     rng = np.random.default_rng(seed)
     raw = load_arm(arm)
-    train_end = VAL_START
+    train_end = val_start(arm)
     history, evals = [], []
     t0, stop = time.time(), "max_steps"
     for step in range(CFG["max_steps"]):
@@ -561,7 +573,7 @@ def cross_arm(models, seed):
         return out
     seq_len = min(SEQ["pcm16le"], SEQ["pcm16be"])
     raw = {a: load_arm(a) for a in ("pcm16le", "pcm16be")}
-    wins = windows("pcm16le", 40, seq_len, VAL_START, N)
+    wins = windows("pcm16le", 40, seq_len, val_start("pcm16le"), nbytes("pcm16le"))
     agree, f1s, rates = [], [], []
     cross = []
     for b in wins:

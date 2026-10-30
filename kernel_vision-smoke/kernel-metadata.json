@@ -1,0 +1,18 @@
+{
+  "id": "mauricew/hnet-vision-smoke",
+  "title": "hnet vision smoke",
+  "code_file": "main.py",
+  "language": "python",
+  "kernel_type": "script",
+  "is_private": true,
+  "enable_gpu": false,
+  "enable_tpu": false,
+  "enable_internet": false,
+  "keywords": [],
+  "dataset_sources": [
+    "mauricew/hnet-vision-bytes"
+  ],
+  "kernel_sources": [],
+  "competition_sources": [],
+  "model_sources": []
+}
