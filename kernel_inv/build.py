@@ -9,7 +9,10 @@ os.makedirs(OUT, exist_ok=True)
 
 model = re.sub(r'^""".*?"""\n', "", open(os.path.join(ROOT, "src", "model.py")).read(), flags=re.S)
 driver = open(os.path.join(ROOT, "kernel", "invariance.py")).read()
-cfg = json.load(open(os.path.join(ROOT, "configs", "q1-u16.json")))
+import sys
+cfg_name = sys.argv[1] if len(sys.argv) > 1 else "q1-u16.json"
+tag = os.path.splitext(cfg_name)[0]
+cfg = json.load(open(os.path.join(ROOT, "configs", cfg_name)))
 
 head = driver.split("class Stream:", 1)[0]
 body = "class Stream:" + driver.split("class Stream:", 1)[1]
@@ -20,7 +23,7 @@ out = ("import json\n"
        + head + model + "\n" + body)
 open(os.path.join(OUT, "main.py"), "w").write(out)
 
-json.dump({"id": "mauricew/hnet-u16-invariance", "title": "hnet u16 invariance",
+json.dump({"id": f"mauricew/hnet-{tag}", "title": f"hnet {tag}",
            "code_file": "main.py", "language": "python", "kernel_type": "script",
            "is_private": True, "enable_gpu": False, "enable_tpu": False,
            "enable_internet": False, "keywords": [],

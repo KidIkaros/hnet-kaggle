@@ -19,6 +19,9 @@ import sys
 
 import numpy as np
 
+sys.path.insert(0, os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "src"))
+from corpus import encode
+
 SRC = "/home/ikaaros/.hermes/cache/scratch/kout4/corpus"
 DST = "/home/ikaaros/.hermes/cache/scratch/ds_hnet/corpus"
 
@@ -52,6 +55,9 @@ def build(lang, k):
             n += len(b)
         wb = b"".join(pieces)
         open(os.path.join(out, f"{split}.bin"), "wb").write(wb)
+        # the DFA state stream: examples() reads it to annotate characters
+        _, st = encode(wb.decode("utf-8"))
+        open(os.path.join(out, f"{split}_state.u8"), "wb").write(st)
         open(os.path.join(out, f"{split}_docs.u32"), "wb").write(
             b"".join(int(o).to_bytes(4, "little") for o in new_offsets))
         plain = wb.decode("utf-8")

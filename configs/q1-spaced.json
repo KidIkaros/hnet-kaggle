@@ -17,7 +17,6 @@
   "wd": 0.1,
   "clip": 1.0,
   "seeds": [
-    0,
     1
   ],
   "arms": [
@@ -25,7 +24,7 @@
   ],
   "eval_every": 250,
   "log_every": 25,
-  "wall_guard_s": 25200,
+  "wall_guard_s": 21600,
   "languages": [
     "cmn",
     "cmn_sp3",
@@ -37,5 +36,5 @@
   "sweep_ratios": [
     4.0
   ],
-  "note": "delimiter-landmark test (CPU): cmn vs cmn with a space every 3 or 6 chars; controls rus/arb"
+  "note": "delimiter-landmark test (CPU): seed 1 only; seed 0 completed in the previous run (examples() crashed afterwards, before seed 1 started)"
 }
