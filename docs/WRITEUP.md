@@ -63,12 +63,16 @@ groups' CIs do not overlap. Japanese is reported as **unresolved**: the pre-regi
 called it "not aligned" by a hair, but the distribution-free sign test gives p=0.14 and two of
 eight seeds came back positive (+0.111, +0.173). The conservative reading wins.
 
-**The split tracks bytes per character** — aligned at 1.78-1.80, not at 2.67 — and the two groups
-separate cleanly.
+**The split is by script, and its cause is not identified.** Bytes per character was the obvious
+candidate and it is wrong: an English corpus widened to 2.69 bytes/char — Chinese's exact width,
+same script, same words, same spaces — aligns (+0.094, every seed), while Chinese at 2.67 does
+not (-0.205, every seed). Width, whitespace delimitation, chunk-length period and ASCII-landmark
+density have each been tested and each failed to explain it. The two groups' CIs still separate
+cleanly, so the *effect* is solid; only its cause has escaped every hypothesis thrown at it.
 
 ## What we killed
 
-Four readings of this evidence were wrong. All four are recorded because the final claim is only
+Five readings of this evidence were wrong. All five are recorded because the final claim is only
 worth what the number of surviving readings is worth.
 
 1. **An off-by-one in the probe.** The first version compared `bmask[t]` against the lead-ness of
@@ -87,15 +91,26 @@ worth what the number of surviving readings is worth.
 4. **A single-seed reading of Hindi.** Hindi scored +0.229 at N=4 in one run and -0.037 in another
    with a different training mixture. Per-language alignment turned out to be sensitive to what
    else was in the mix, and the instability (0.27) exceeded the effects being claimed.
+5. **Bytes per character as the cause.** The replication showed alignment tracking width across
+   languages, so width was manipulated directly: appending a combining acute to every letter of
+   the *same* English text turns it from 1.00 into 2.69 bytes/char — Chinese's exact width —
+   with the script, words, spaces, documents and byte count unchanged. English at 2.69 aligns
+   (+0.094, every seed); Chinese at 2.67 does not (-0.205, every seed). Same width, opposite
+   signs. The pre-registered falsifier's magnitude threshold (+0.10) was missed by 0.006, so its
+   letter did not fire, but two of six pre-registered checks failed and the substance is refuted.
 
-What survived is bytes-per-character, and it survived a *pre-registered* test with an explicit kill
-criterion (rus and cmn overlapping) that was not met.
+What survived every test is the **effect** — Russian and Arabic align, 8/8 seeds, p = 0.004;
+Chinese does not — and not its cause. Four candidate mechanisms have now been tested and refuted:
+chunk-length period, whitespace delimitation, bytes per character, and ASCII-landmark density
+(`rus_comb` and `cmn` have nearly identical ASCII shares, 0.058 and 0.062, yet +0.075 vs -0.205).
 
-**Still open: the mechanism.** Width is the best predictor, but the evidence is circumstantial —
-seven languages, one of them (Hindi) unreplicated, and no experiment that manipulates width
-directly. The one causal test we ran, on whitespace, came out null. The direct test would hold a
-script fixed and change its byte width (re-encoding, for instance), and watch alignment move; that
-is cheap on CPU and is the obvious next experiment.
+**Still open: the mechanism, and it has resisted four tests.** Width was the best predictor
+until it was manipulated directly and failed. The next candidate is the script type itself:
+Chinese and Japanese are the only logographic scripts in the set. Thai is the cell that decides
+it — alphabetic, wider than Chinese, unspaced, and with a lower ASCII share than Chinese — and it
+is running now. If Thai aligns, the effect is specific to logographic scripts; if it does not, the
+honest answer is a two-factor description with no mechanism, and that the cause is unidentified
+at this scale.
 
 ## Limits
 

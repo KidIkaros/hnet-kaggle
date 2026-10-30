@@ -19,25 +19,23 @@
   "seeds": [
     0,
     1,
-    2,
-    3
+    2
   ],
   "arms": [
     "hnet"
   ],
   "eval_every": 250,
   "log_every": 25,
-  "wall_guard_s": 21600,
+  "wall_guard_s": 10800,
   "languages": [
-    "eng",
+    "tha",
     "eng_comb",
-    "rus",
-    "rus_comb",
-    "cmn"
+    "cmn",
+    "rus"
   ],
   "params_target": 840000.0,
   "sweep_ratios": [
     4.0
   ],
-  "note": "width manipulation: same text and script, bytes/char manipulated; pre-registered in ticket 17"
+  "note": "Thai cell: separates logographic script from width/space/ASCII explanations; pre-registered in ticket 18"
 }

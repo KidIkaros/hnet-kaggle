@@ -283,3 +283,29 @@ off-by-one in the alignment probe (a bug), a chunk-length/character-width hypoth
 a whitespace hypothesis (refuted), and a single-seed reading of Hindi that did not survive
 replication. The claim above is the fifth reading and the only one that has survived replication
 with a pre-registered kill criterion that was not met.
+
+## Amendment 6: the width explanation is withdrawn; the cause is unidentified
+
+The width manipulation (ticket 17) falsified bytes-per-character as the cause. English widened to
+2.69 B/char — Chinese's exact width, same script, same words, same spaces, same byte count —
+aligns (+0.094, every seed); Chinese at 2.67 does not (-0.205, every seed). Same width, opposite
+signs. ASCII-landmark density does not separate them either: `rus_comb` (0.058) and `cmn` (0.062)
+have nearly identical ASCII shares and opposite signs.
+
+**The claim's mechanism sentence is therefore withdrawn.** What remains is the effect — Russian
+and Arabic align, 8/8 seeds, p = 0.004; Chinese does not — with no identified cause. Four
+candidate mechanisms have now been tested and refuted: chunk-length period (ticket 12),
+whitespace delimitation (ticket 14), bytes per character (ticket 17), ASCII-landmark density
+(ticket 17).
+
+**And the pattern across all five amendments is itself the finding.** Every reading of this data
+that was proposed as a cause has been overturned by the next experiment, while the effect itself
+has replicated every time it was measured with seeds. At 0.84 M parameters, cross-sectional
+comparisons between languages keep producing a story that a within-language manipulation then
+destroys. The honest summary is: *this model aligns chunk boundaries to character starts in some
+scripts and not others, and we have not identified why.*
+
+**Next:** Thai (ticket 18) — alphabetic, wider than Chinese, unspaced, lower ASCII share than
+Chinese. Every surviving explanation predicts Thai fails; only "logographic script breaks it"
+predicts Thai succeeds. If Thai aligns, the cause is the script type. If it does not, the honest
+answer is a two-factor description with no mechanism.

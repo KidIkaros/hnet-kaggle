@@ -55,6 +55,10 @@ that trains, generates and reports chunk alignment on a single T4.
 - [Verdict](issues/09-verdict.md) — **untested, with a mechanism inside it**: character structure
   is found on whitespace-delimited 2-byte scripts and lost on CJK. Q2 doesn't follow yet; the
   next run must control (N, character width), which was never swept.
+- [Width manipulation](issues/17-width-manipulation.md) — **H1 DEAD.** English at Chinese's exact
+  width aligns (+0.094, 4/4) while Chinese at 2.67 does not (-0.205, 4/4). The pre-registered
+  falsifier missed by 0.006 on a magnitude threshold, but two of six checks failed. Width,
+  whitespace, chunk period and ASCII density are all refuted as causes.
 - [Write-up](issues/16-write-up.md) — `docs/WRITEUP.md`: claim, pre-registered falsifier, setup,
   results with CIs and sign tests, the four killed readings, limits, and what the published
   scaling claims can and cannot be told by this.
@@ -93,9 +97,8 @@ that trains, generates and reports chunk alignment on a single T4.
 
 ## Frontier
 
-- **Width manipulation, causal test (wayfinder:task)** — re-encode one script at a different byte
-  width and watch alignment move. Not needed for the claim; needed for the mechanism. The last
-  open question in this effort.
+- **Thai cell (wayfinder:task)** — alphabetic, wider than Chinese, unspaced, lower ASCII share.
+  The last cell that separates "logographic script" from every other explanation.
 
 ## Not yet specified
 
