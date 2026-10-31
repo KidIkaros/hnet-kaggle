@@ -125,11 +125,12 @@ below exists to test.
 
 - **Scale ladder (wayfinder:task, GPU)** — 2.6 M parameters, UTF-8/UTF-16 twins: is the byte
   phase stable across scale, and does it ever land on characters at larger size?
-- **Vision I, byte-encoded images (wayfinder:task, CPU)** — the same layout-vs-semantics question
-  on images: pixel and row phase against edge alignment, across four encodings of the same pixels.
-- **Audio (wayfinder:task, CPU)** — PCM-LE vs PCM-BE: the same samples with every byte pair
-  swapped. The sharpest single test here — semantic chunking predicts identical boundary times,
-  layout chunking predicts chance agreement.
+- **Vision I — DONE** ([ticket 23](issues/23-vision-bytes.md)): no edge or object alignment
+  (+0.017 / +0.025), pixel/row phase enriched, and the phase moves when channels are permuted
+  (0.466 -> 0.566); rgb vs bgr agree at chance (0.369 vs 0.364). Remaining: `planar`, `gray`.
+- **Audio — DONE** ([ticket 25](issues/25-audio-bytes.md)): chunk duration varies 2.9x at a fixed
+  byte budget, onsets unaligned, and LE vs BE agree at 0.036 vs chance 0.114 but 0.217 when
+  shifted one byte. Remaining: `f32le` (OOM at step 100).
 - **Vision II, 2D H-Net (wayfinder:task, CPU, most engineering)** — patch chunking against known
   object masks; the most directly comparable item to Cartesia's published vision claim.
 - **Code (wayfinder:task, CPU, licensing-dependent)** — syntax alignment in the domain where the

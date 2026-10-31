@@ -1,7 +1,7 @@
 # Vision I: does a byte-level chunker find image structure, or raster phase?
 
 Type: task
-Status: open
+Status: resolved
 Blocked by: 21
 
 ## Question

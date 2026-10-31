@@ -212,6 +212,78 @@ characters. This is falsifiable in a specific way: it predicts off1 enrichment i
 every script, and stronger off1 preference in scripts whose bytes change most within a
 character.
 
+## Beyond language: the same test in images and audio
+
+If the finding is "learned chunking keys on the layout of the serialization, not on the content",
+it should hold in any modality that is serialized into a byte stream. Two arms test it, each with
+a manipulation that holds the content fixed and changes only the byte layout.
+
+### Images: rgb vs bgr
+
+2,000 images at 64x64 (COCO-style synthetic scenes), row-major RGB. Pixels are the "characters"
+(3 bytes each) and rows are the "words" (192 bytes each), so layout and semantics make different
+predictions: layout says boundaries fall on pixel starts (offset mod 3) or row starts; semantics
+says they fall on edges and object outlines. `bgr` is the same pixels with the channel order
+permuted inside each pixel -- identical byte count, identical pixel grid, only the byte values
+change.
+
+| arm | bytes/chunk | edge lift | object lift | pixel-start share | row-start share |
+|---|---|---|---|---|---|
+| rgb | 5.64 | **+0.017** | **+0.025** | 0.466 | 0.031 |
+| bgr | 5.75 | **+0.006** | **-0.000** | 0.566 | 0.026 |
+
+Chance for the pixel-start share is 0.333 and for the row-start share 0.016. **Neither arm
+aligns to edges or objects** -- both lifts are within a couple of points of zero, and they stay
+there across all nine evals from step 500 to 4500, so this is not a model that was still learning
+semantics at the end. What the boundaries do prefer is the *layout*: pixel starts are enriched
+1.4x in rgb and 1.7x in bgr, and row starts about 2x in both.
+
+**The channel permutation moves the phase.** Pixel-start share rises from 0.466 (rgb) to 0.566
+(bgr) even though the pixel grid is identical, and the pixel-space agreement between the two
+models is **0.369 against a chance level of 0.364** -- at chance. Two models that had learned
+anything about the image would put boundaries on the same pixels; these do not.
+
+### Audio: PCM-LE vs PCM-BE
+
+37.8 minutes of speech, 8 clips, 7 languages, at 8 kHz, in four encodings of the same samples.
+`pcm16le` and `pcm16be` differ only in byte order: a boundary before sample *k* sits at byte 2*k*
+in both, so a signal-following chunker places boundaries at the same offsets and a
+byte-value-following chunker cannot.
+
+| arm | bytes/chunk | ms/chunk | onset lift |
+|---|---|---|---|
+| pcm16le | 5.56 | **0.35** | +0.003 |
+| pcm16be | 4.48 | **0.28** | -0.004 |
+| mulaw | 6.56 | **0.82** | -0.000 |
+
+**Chunk length tracks bytes, not time.** All three arms land near the 6-byte ratio target
+(4.5-6.6 bytes), while the *duration* of a chunk varies by 2.9x between mu-law (0.82 ms) and
+16-bit (0.28-0.35 ms). A chunker that had learned anything about speech would hold duration
+roughly constant across encodings; this one holds the byte count and lets the duration float.
+Onset alignment is zero in every arm.
+
+**The byte-order test is the sharpest result in the study.** Boundaries at identical byte offsets
+agree at a Jaccard of **0.036, against a chance level of 0.114** -- well *below* chance. Shifting
+one arm by a single byte raises agreement to **0.217**. The two models are not placing boundaries
+at unrelated positions; they are placing them at the *same* positions one byte apart, because
+each has locked onto a different byte-value class within the sample (low byte vs high byte). That
+is a byte phase, measured directly, with no semantic reference needed.
+
+### What the two arms together establish
+
+The text finding was that a learned chunker keys on the encoding's byte layout rather than on
+characters. Images and audio say the same thing in a stronger form: **in both modalities the
+boundary structure is set by the serialization and moves when the serialization moves, while
+alignment to the content -- edges, objects, onsets -- stays at zero.** The audio arm also pins
+the mechanism: the phase is a byte-value class, off by exactly one byte between the two byte
+orders.
+
+**What is not measured.** The `f32le` arm died on a CUDA OOM at step 100 (three models resident
+plus 1024-byte sequences), so 32-bit float is unmeasured; `planar` and `gray` were not run at all.
+The image arm used one seed per encoding and 2,000 images, and the audio arm one seed per
+encoding. None of this changes the direction of the result -- three encodings agreeing at chance
+and one agreeing only when shifted by a byte is not a marginal effect -- but the f32 gap is a gap.
+
 ## What we killed
 
 Six readings of this evidence were wrong. All six are recorded because the final claim is only

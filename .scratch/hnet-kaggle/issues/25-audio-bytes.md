@@ -1,7 +1,7 @@
 # Audio: encoding invariance on a waveform
 
 Type: task
-Status: open
+Status: resolved
 Blocked by: 23
 
 ## Question
