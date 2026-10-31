@@ -136,7 +136,20 @@ actual rung is fixed after the speed work reveals what the quota affords, in eit
 rather than gambled on.
 
 **The compression target is fixed, not tuned away.** If the dynamics will not settle at the
-target ratio, the fix is in the optimisation, not in moving the target.
+target ratio, the fix is in the optimisation, not in moving the target — though a curriculum that
+*ramp* to the target is an allowed mechanism, because it ends at the same target.
+
+**The interventions come from the published record, not from our own invention.** A cited
+catalogue of every published intervention for the same failure — with the ones reported as not
+helping, and the numbers behind each — is the reference for the dynamics work. Where two sources
+disagree, the disagreement is recorded rather than resolved by preference. The catalogue also
+corrects a mis-attribution in the existing research notes, which had attributed a low-resource
+chunking paper to an unrelated title.
+
+**The learned router is measured, not assumed.** One arm replaces it with a fixed stride at the
+same compression and the same FLOPs. If the fixed stride matches the learned chunker, the router
+is not earning its place — which is a statement about our model, and one we are willing to
+publish either way.
 
 **The byte phase is accepted.** Our router settles on a byte phase rather than on content. The
 published comparison is against a learned chunker rather than a content-aligned one, so the phase

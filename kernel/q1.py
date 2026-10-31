@@ -105,6 +105,19 @@ def lr_at(step, cfg):
     return cfg["lr"] * 0.5 * (1 + math.cos(math.pi * min(1.0, p)))
 
 
+def global_ratio_loss(aux, N):
+    """Ratio loss from F and G accumulated over the whole batch, not per sequence.
+
+    Dynamic LCMs measured the per-sequence variant ("Normal") at realised ratio 3.15 against a
+    target of 4.0, and the batch-accumulated variant ("Global Parser") at 3.92. Our F and G are
+    each estimated from one 256-byte sequence and then averaged, so each sequence's loss is
+    individually satisfiable at the wrong global rate. This forms one estimate over the batch.
+    """
+    F = aux["bmask"].float().mean()
+    G = aux["p"].mean()
+    return (N / (N - 1)) * ((N - 1) * F * G + (1 - F) * (1 - G))
+
+
 def run_seed(seed, deadline, ratio=None):
     torch.manual_seed(seed)
     np.random.seed(seed)
@@ -122,13 +135,33 @@ def run_seed(seed, deadline, ratio=None):
     stream = Stream(np.random.default_rng(seed), CFG["batch"], CFG["seq_len"])
     history, evals = [], []
     t0, done, stop = time.time(), 0, "max_steps"
+    cur = cfg.target_ratio
+    nc = CFG.get("n_curriculum")
+    win_ce, best_ce, plateau = [], None, 0
 
     for step in range(CFG["max_steps"]):
         b64, origin = stream.batch_bytes()
         batch = torch.from_numpy(b64).to(DEV)
         logits, aux = model(batch[:, :-1])
         ce = F.cross_entropy(logits.reshape(-1, 256), batch[:, 1:].reshape(-1))
-        loss = ce + CFG["alpha"] * aux["ratio_loss"]
+        if nc and cur < nc["to"]:
+            win_ce.append(ce.item())
+            if len(win_ce) >= nc.get("window", 100):
+                m = sum(win_ce) / len(win_ce)
+                best_ce = m if best_ce is None else min(best_ce, m)
+                if best_ce > 0 and (best_ce - m) / best_ce < nc.get("tau", 0.05):
+                    plateau += 1
+                    cur = min(nc["to"], cur * nc.get("gamma", 1.05))
+                    model.cfg.target_ratio = cur
+                    log(f"  N curriculum: target ratio -> {cur:.3f} (plateau {plateau})")
+                    win_ce, best_ce = [], None
+                else:
+                    win_ce = []
+        if CFG.get("ratio_scope", "sequence") == "global":
+            rl = global_ratio_loss(aux, model.cfg.target_ratio)
+        else:
+            rl = aux["ratio_loss"]
+        loss = ce + CFG["alpha"] * rl
         opt.zero_grad(set_to_none=True)
         loss.backward()
         gn = nn.utils.clip_grad_norm_(model.parameters(), CFG["clip"])
@@ -141,7 +174,9 @@ def run_seed(seed, deadline, ratio=None):
             lift, on_lead, base = alignment(batch.cpu(), aux["bmask"].cpu())
             history.append({"step": step, "seed": seed, "ce": ce.item(),
                             "bpb": ce.item() / math.log(2),
-                            "ratio_loss": aux["ratio_loss"].item(),
+                            "ratio_loss": float(rl.item()),
+                            "ratio_loss_seq": aux["ratio_loss"].item(),
+                            "N": model.cfg.target_ratio,
                             "F": aux["F"], "G": aux["G"],
                             "bytes_per_chunk": aux["bytes_per_chunk"],
                             "realised_ratio": 1.0 / max(aux["bytes_per_chunk"], 1e-9),

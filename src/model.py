@@ -217,7 +217,11 @@ def param_groups(model, mult_outer=1.0, mult_main=1.0):
     if outer:
         groups.append({"params": outer, "lr_mult": mult_outer, "name": "outer"})
     if main:
-        groups.append({"params": main, "lr_mult": mult_main, "name": "main"})
+        # The official code applies the OUTER stage's multiplier to every parameter of that
+        # stage -- including the main network, which is a submodule of it -- and then applies
+        # the main network's own multiplier on top. Its own comment says so. So the main
+        # network's effective multiplier is the product, not the bare second number.
+        groups.append({"params": main, "lr_mult": mult_outer * mult_main, "name": "main"})
     return groups
 
 
@@ -358,6 +362,8 @@ class HNetLM(nn.Module):
             "ratio_loss": ratio_loss,
             "F": Fs.mean().item(),
             "G": G.mean().item(),
+            "Fs": Fs,
+            "Gs": G,
             "bmask": bmask,
             "p": p,
             # bytes of input per chunk, averaged over sequences -- dividing by the

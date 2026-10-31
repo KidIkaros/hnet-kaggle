@@ -7,9 +7,9 @@
   "d_state": 16,
   "d_conv": 4,
   "scan_chunk": 64,
-  "target_ratio": 6.0,
-  "alpha": 0.1,
-  "max_steps": 3000,
+  "target_ratio": 4.5,
+  "alpha": 0.03,
+  "max_steps": 5000,
   "seq_len": 256,
   "batch": 16,
   "lr": 0.001,
@@ -22,9 +22,9 @@
   "arms": [
     "hnet"
   ],
-  "eval_every": 250,
-  "log_every": 25,
-  "wall_guard_s": 7200,
+  "eval_every": 500,
+  "log_every": 50,
+  "wall_guard_s": 21600,
   "languages": [
     "eng",
     "deu",
@@ -36,5 +36,12 @@
   "params_target": 840000.0,
   "seeds_run_as": "one kernel per seed (mauricew/hnet-q1-s0, -s1): 3.25 s/step measured > 1.4 estimated, so a single 6 h guard would truncate both below the 5000-step floor",
   "sweep_ratios": null,
-  "note": "stronger ratio loss (alpha 0.1 vs 0.03)"
+  "n_curriculum": {
+    "from": 4.5,
+    "to": 6.0,
+    "tau": 0.05,
+    "gamma": 1.05,
+    "window": 100
+  },
+  "note": "ATDC-style curriculum on the target ratio, 4.5 -> 6.0"
 }

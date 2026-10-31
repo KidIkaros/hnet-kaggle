@@ -61,13 +61,27 @@ that RESEARCH.md §4.1 quotes correctly on substance, so the fix is to the title
   - α = 1.0 → `C_emp = 4.97` (0.6% short). **Essentially exact.**
   - Direction: raising α moves the *settled* ratio toward the target, it does not fix an
     oscillation per se — the paper reports the settled values, not the trajectory shape.
-  - The Sombrero design ladder (Table 1) shows the same H-Net baseline at `C_emp = 4.975`
-    against `C_tar = 5.0`, with BPB 0.6701; `+CAB Loss (0.01)` reaches `C_emp = 4.999`,
-    BPB 0.6568; `+Byte-Level Smooth` gives BPB 0.6571 at `C_emp = 4.986`.
-  - Scaling to 5.85 GFLOPs/byte / 2.19B params with `C_tar = 4.6`: H-Net `C_emp = 4.588`,
-    Sombrero `C_emp = 4.604`.
+  - The Sombrero design ladder (Table 1) reports the H-Net baseline at `C_emp = 4.975` against
+    `C_tar = 5.0`, BPB 0.6701, boundary enrichment `B` 1.19; `+Byte-Level Smooth` gives BPB
+    0.6571 / `C_emp` 4.986 / `B` 2.612; `-Confidence-Weight` BPB 0.6571 / `C_emp` 4.968 /
+    `B` 2.81; `+Sigmoid Chunking` BPB 0.6578 / `C_emp` 4.986 / `B` 2.606; `+CAB Loss (0.01)`
+    BPB 0.6568 / `C_emp` 4.999 / `B` 3.035; `H-Net+CAB Loss` BPB 0.664 / `C_emp` 4.977 /
+    `B` 2.774. At 5.85 GFLOPs/byte and 2.19B params with `C_tar = 4.6`: `H-Net Scale Up`
+    `C_emp = 4.588`, `Sombrero Scale Up` `C_emp = 4.604`.
   - Varying `C_tar ∈ {4, 5, 6, 7}` (FLOP-matched, 20k steps): *"in all cases, the empirical
     compression rate closely matches the target compression rate."*
+- **Two caveats we could not resolve from the source, stated rather than glossed:**
+  1. **Which ω the Table-1 "H-Net" row used is not stated.** The §4.1 text reports ω = 0.03 →
+     `C_emp = 3.95` and ω = 1.0 → `C_emp = 4.97`, but the ladder's H-Net row shows
+     `C_emp = 4.975` — i.e. consistent with the ω = 1.0 setting, not the ω = 0.03 one. The
+     ladder's H-Net baseline therefore appears to *already include* the weight increase, so
+     the ladder measures the *other* Sombrero components on top of ω = 1.0, not on top of the
+     paper's α = 0.03. **We could not find a statement resolving this.**
+  2. **The paper's "BPB by 0.037" claim does not match its own Table 1.** The text says
+     *"Adding CAB to H-Net directly improves BPB by 0.037"*, but Table 1 gives H-Net 0.6701 →
+     H-Net+CAB Loss 0.664, a difference of **0.0061**; and H-Net → full Sombrero is 0.0133.
+     We quote the number as the paper states it and give the table values alongside; we did
+     not find the 0.037 figure reproduced anywhere else in the paper.
 - **Author's verdict:** helping. This is the only source we found that reports a *target-rate
   miss at α = 0.03* and a *fix by raising α*, with numbers on both sides.
 - **Caution for us:** SOMBRERO measures the mismatch on a 1B model with 839B bytes of training.
@@ -617,7 +631,7 @@ Ranked by (evidence strength) × (fit to the specific symptom), all from §1.
 ### 4.4 Two checks on our own setup that the sources imply, before spending more compute
 
 - **Are we actually running the paper's smoothing module?** The paper's own ablation says
-  removing it makes *"compression ratios fluctuate severely throughout training"* (§1.13). Our
+  removing it makes *"compression ratios fluctuate severely throughout training"* (§1.14). Our
   `kernel_q1/main.py:271–291` implements an EMA over main-network outputs with a STE gate,
   which looks like the paper's Eq. 5 — but the *chunk-level vs byte-level* distinction that
   SOMBRERO makes (§1.2) is worth checking explicitly, because the paper's version ignores

@@ -3,7 +3,7 @@
 Research date: 2026-10-29. Sources: Cartesia Post I & II (2026-10-28), H-Net paper
 arXiv:2507.07955v2, official code `goombalab/hnet`, independent implementation +
 replication `main-horse/hnet-impl`, practitioner notes `main-horse.github.io/hnet/*`,
-"All Roads Lead to Likelihood"/`2608.27658` (boundary-ratio failure in low resource),
+"When Tokenizers Fail"/`2608.27658` (boundary-ratio failure in low resource),
 plus the local `mbdfa/` results from the 2026-10-24 session.
 
 Every number below is attributed. Where two sources disagree, both are recorded.
@@ -214,7 +214,7 @@ wikipedia; fineweb-2 covers zh/ja/ar. Kernel internet is available.
 - `github.com/main-horse/hnet-impl` (MIT) + `main-horse.github.io/hnet/{intuitions,
   scaling-laws-byte,param-s0,param-s1,eng-1gpu}` — replication, negative result at
   1e16-1e18, and the protocol critique quoted in §3.
-- `arXiv:2608.27658` — boundary-ratio loss fails to find word boundaries in low resource.
+- `arXiv:2608.27658` — *When Tokenizers Fail: Byte-Level Chunking for Zero-Shot Transfer to Low-Resource Languages* — boundary-ratio loss fails to find word boundaries in low resource. (Earlier notes in this repo mis-attributed this arXiv id to "All Roads Lead to Likelihood", which is arXiv:2503.01067 and unrelated; the finding quoted here was always this paper.)
 - `github.com/anshulk-cmu/H-Net-Mamba-ASR` — realised 0.4224 vs 0.5 target at N=2.
 - `arXiv:2502.12120` (*LLMs on the Line*) — the "tokenizer doesn't matter for loss-to-loss"
   claim Post II refutes.
