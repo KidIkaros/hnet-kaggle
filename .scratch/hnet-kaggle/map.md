@@ -123,8 +123,9 @@ below exists to test.
 
 ## Frontier
 
-- **Scale ladder (wayfinder:task, GPU)** — 2.6 M parameters, UTF-8/UTF-16 twins: is the byte
-  phase stable across scale, and does it ever land on characters at larger size?
+- **Scale ladder — DONE** ([ticket 22](issues/22-scale-ladder.md)): 2.43 M parameters, UTF-8 and
+  UTF-16 arms. **Not one sign flips**; the cross-encoding reversal survives at 2.9x scale, so the
+  byte phase is not a small-model artifact. Next rung (8 M) only if a reviewer asks.
 - **Vision I — DONE** ([ticket 23](issues/23-vision-bytes.md)): no edge or object alignment
   (+0.017 / +0.025), pixel/row phase enriched, and the phase moves when channels are permuted
   (0.466 -> 0.566); rgb vs bgr agree at chance (0.369 vs 0.364). Remaining: `planar`, `gray`.

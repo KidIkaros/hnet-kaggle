@@ -212,6 +212,38 @@ characters. This is falsifiable in a specific way: it predicts off1 enrichment i
 every script, and stronger off1 preference in scripts whose bytes change most within a
 character.
 
+## Is the byte phase a small-model artifact? No.
+
+Every number so far comes from a 0.84 M-parameter model, which leaves the obvious escape hatch:
+perhaps characters are learnable, and 0.84 M is simply too small. The ladder's first rung is
+2.43 M parameters — 2.9x — same five-language mixture, same 5,000 steps, same metrics, one seed
+per arm.
+
+| script | UTF-8 lift 0.84 M | UTF-8 lift 2.43 M | UTF-16 lift 0.84 M | UTF-16 lift 2.43 M |
+|---|---|---|---|---|
+| eng | +0.000 | -0.001 | -0.059 | **-0.152** |
+| rus | +0.178 | +0.149 | -0.165 | **-0.197** |
+| cmn | -0.153 | **-0.254** | +0.152 | +0.135 |
+| jpn | -0.161 | -0.136 | -0.067 | **-0.194** |
+| arb | +0.254 | **+0.316** | -0.177 | -0.113 |
+
+**Not one sign flips.** Russian and Arabic still align to characters in UTF-8 and still
+anti-align in UTF-16; Chinese still does the reverse. The cross-encoding ordering reverses at
+both scales, which is the whole point: rus +0.149 against -0.197, arb +0.316 against -0.113,
+cmn -0.254 against +0.135.
+
+What scaling did do is sharpen the existing byte-phase structure rather than reveal a new one.
+Chinese's UTF-8 anti-alignment roughly doubles (-0.153 to -0.254), Arabic's UTF-8 alignment
+strengthens (+0.254 to +0.316), and in UTF-16 English and Japanese move further negative
+(-0.059 to -0.152, -0.067 to -0.194). That is what a byte-phase account predicts: more capacity
+buys a more precise phase, not a different object of learning.
+
+**Caveat.** The 2.43 M arms are one seed each against a 0.84 M reference built from 10
+checkpoints crossed with 2 seeds. Single-seed arms can move by the seed spread the replication
+measured (±0.06 to ±0.15 depending on script), so the *magnitude* changes above are not
+individually significant — the *signs* and the reversal are, because a reversal that survives
+2.9x scale and appears in every script is not something seed noise produces.
+
 ## Beyond language: the same test in images and audio
 
 If the finding is "learned chunking keys on the layout of the serialization, not on the content",

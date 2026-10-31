@@ -92,6 +92,41 @@ def boundaries_to_chars(bmask, raw_bytes, utf16):
     return set(idx[pos].tolist())
 
 
+def evaluate_u16_only(u16_model, lang, windows=12, chars=96):
+    """UTF-16 alignment alone, with no UTF-8 twin.
+
+    The scale ladder asks whether the UTF-16 anti-alignment survives at 2.4 M parameters. That is
+    a single-model measurement: the pairing in evaluate_pair exists to show that the same text
+    chunks differently in two encodings, which is already established at 0.84 M. Pairing a 2.4 M
+    UTF-16 model against 0.84 M UTF-8 checkpoints produces agreement numbers that mean nothing,
+    so this path reports the lift and nothing else.
+    """
+    text = open(os.path.join(DATA, lang, "val.bin"), "rb").read().decode("utf-8", "replace")
+    step = max(1, (len(text) - chars) // max(windows, 1))
+    lifts, bpcs = [], []
+    for w in range(windows):
+        piece = text[w * step:w * step + chars]
+        if len(piece) < 16:
+            continue
+        b16 = piece.encode("utf-16-le")
+        while len(b16) > SEQ - 1 and len(piece) > 8:
+            piece = piece[: len(piece) // 2]
+            b16 = piece.encode("utf-16-le")
+        if len(b16) > SEQ - 1:
+            continue
+        with torch.no_grad():
+            i16 = torch.from_numpy(np.frombuffer(b16, np.uint8).astype(np.int64))[None]
+            _, a16 = u16_model(i16)
+        m16 = a16["bmask"][0].numpy()
+        even = np.arange(len(b16)) % 2 == 0
+        lifts.append(float(even[m16].mean() - even.mean()) if m16.any() else 0.0)
+        bpcs.append(float(a16["bytes_per_chunk"]))
+    if not lifts:
+        return None
+    return {"u16_lift": float(np.mean(lifts)), "bpc_u16": float(np.mean(bpcs)),
+            "windows": len(lifts)}
+
+
 def evaluate_pair(u8_model, u16_model, lang, windows=12, chars=96):
     """Run both models on the same text and compare boundaries in character space."""
     text = open(os.path.join(DATA, lang, "val.bin"), "rb").read().decode("utf-8", "replace")
@@ -180,7 +215,8 @@ def main():
     log("data", DATA, "ckpts", CKPT_DIR)
     ckpts = sorted(glob.glob(os.path.join(CKPT_DIR, "ckpt-s*-n4.pt")))
     log(f"{len(ckpts)} UTF-8 checkpoints")
-    assert ckpts, "no UTF-8 checkpoints found"
+    if CFG.get("pair", True):
+        assert ckpts, "no UTF-8 checkpoints found"
     out = []
     for seed in CFG["seeds"]:
         deadline = time.time() + CFG.get("wall_guard_s", 8 * 3600) / len(CFG["seeds"])
@@ -188,6 +224,15 @@ def main():
         torch.save({"config": dict(u16_model.cfg.__dict__), "seed": seed,
                     "state": u16_model.state_dict()},
                    os.path.join(OUT, f"ckpt-u16-s{seed}.pt"))
+        if not CFG.get("pair", True):
+            u16_model.eval()
+            res = {"u16_seed": seed, "mode": "u16_only"}
+            for lang in LANGS:
+                res[lang] = evaluate_u16_only(u16_model, lang)
+                log(f"  s{seed} {lang}: u16_lift {res[lang]['u16_lift']:+.3f} "
+                    f"bpc {res[lang]['bpc_u16']:.2f}")
+            out.append(res)
+            continue
         for ck in ckpts:
             blob = torch.load(ck, map_location="cpu", weights_only=False)
             u8_model = HNetLM(HNetConfig(**blob["config"]))

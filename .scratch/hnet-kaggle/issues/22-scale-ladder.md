@@ -1,7 +1,7 @@
 # Scale ladder: are characters simply out of reach at 0.84 M parameters?
 
 Type: task
-Status: open
+Status: resolved
 Blocked by: 19, 21
 
 ## Question
