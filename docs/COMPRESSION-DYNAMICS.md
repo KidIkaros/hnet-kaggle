@@ -159,9 +159,32 @@ that RESEARCH.md §4.1 quotes correctly on substance, so the fix is to the title
   sequence is overly restrictive. Real-world data exhibits varying information density. By
   relaxing the constraint to operate at the batch level, the global regularization allows the
   model to learn adaptive behavior."*
-- **Relevance to us:** our ratio loss is computed per minibatch. If our F/G are estimated on a
-  small batch (our `batch: 16`, `seq_len: 256`), the statistic is noisy and the loss can
-  plateau on sampling noise rather than on the true rate.
+- **An internal inconsistency in the source, stated rather than smoothed over:** the §8.2 body
+  text says the two models were trained *"with a target compression ratio of R = 2"*, while the
+  Table 4 caption says *"Both models aim for a target compression ratio of R = 4"* and the table
+  row itself reads *"(Target R = 4)"*. The realised values 3.92 vs 3.15 are consistent with a
+  target of 4, so the caption is probably right and the body text is a typo — but we cannot be
+  sure, and we quote the numbers as printed.
+- **Independent corroboration of the *mechanism* from a second source:** ConceptMoE
+  (arXiv:2601.21420, §3.2, Eq. 4) uses the identical H-Net load-balancing loss form —
+  `L_aux = R/(R−1)·((R−1)F₁G₁ + (1−F₁)(1−G₁))` — and states explicitly: *"when computing G₁
+  and F₁, we aggregate statistics across all samples in the current devices rather than
+  averaging per-sample statistics. This enables sample-level compute allocation."* So the
+  aggregated-statistics choice is not a one-off; two independent 2026 papers use it, and the
+  official H-Net code flags it as the open question it was (§5 item 6).
+- **Relevance to us — and a precise statement of how our code differs from the official one.**
+  The official `goombalab/hnet` `load_balancing_loss` computes `true_ratio = boundary_mask.float().mean()`
+  and `average_prob = tokenized_prob.float().mean()` over the **whole flat device minibatch**
+  (`hnet/utils/train.py:34–35`), and only then averages the resulting per-device losses
+  (`:37–40`, with the NOTE at `:20–22`). So the official H-Net already aggregates F and G
+  across all sequences in a device batch — it is *closer to the "Global" variant* than ours is.
+  **Our `kernel_q1/main.py:371–372` computes F and G per sequence and averages the per-sequence
+  losses**, which is the third thing again: neither the official device-batch aggregation nor
+  the Dynamic-LCMs global-micro-batch accumulation. Each of our per-sequence F and G is
+  estimated from 256 samples, and the loss is a mean of 16 such noisy terms rather than one
+  estimate over 4096 bytes. This is a cheap, no-architecture-change intervention we have not
+  tried, and it aligns our implementation with the official one even before we adopt the
+  Dynamic-LCMs variant.
 
 ### 1.5 Replace the cosine router with a linear sigmoid router (SOMBRERO) — **inconclusive / context-dependent**
 
@@ -214,11 +237,24 @@ that RESEARCH.md §4.1 quotes correctly on substance, so the fix is to the title
     BPB starts 4.17 and converges smoothly to 3.13 within 7.5k steps (25% relative reduction).
   - POS supervision: chunk-level POS accuracy 43.1% → **59.5%** (+16.4 pts), byte-level
     essentially unchanged (32.5 → 32.8).
-  - Alignment loss: without it, chunks-per-word collapses to 0.05–0.13 across six languages
-    (each chunk spans 8–17 words) and 1:1 alignment drops to ~0%; with it, 1:1 is 82.5–93.2%.
+  - Alignment loss: without it, chunks-per-word (C/W) collapses — the table gives Hindi 0.05,
+    Bhojpuri 0.06, Marathi 0.13, Magahi 0.07, Sanskrit 0.13, Urdu 0.07, i.e. *"each chunk spans
+    between 8 and 17 words on average, heavily deviating from the target ratio of approximately
+    1.0"* (the paper's own prose says the range is 0.06–0.13; the table's Hindi value is 0.05).
+    The 1:1 chunk-per-word rate drops to 5.5 / 3.4 / 0.0 / 0.0 / 0.4 / 27.5 percent across the
+    six languages; with the alignment loss it is 92.5 / 91.0 / 82.5 / 87.8 / 87.3 / 93.2
+    percent, and C/W returns to 1.24 / 1.17 / 1.42 / 1.17 / 1.96 / 1.06.
 - **Author's verdict:** helping, decisively — but *in a setting we are not in* (frozen subword
   backbone, low-resource, 500K sentences). The paper's own framing of the failure mode is
   exactly ours: *"the boundary ratio fluctuates between 0.43 and 0.49 throughout training"*.
+- **Important difference in the loss form — this paper is NOT using H-Net's Eq. (10).** Its
+  §3.1 defines `L_ratio = (p̄ − ρ*)²` — a plain squared error on the *mean boundary
+  probability* alone, with no `F` term and no `N/(N−1)` normalisation. So its
+  "the standard boundary ratio loss" is a simplification of H-Net's, and its λ_ratio is not
+  directly comparable to H-Net's α. We flag this because the task framing treats this paper
+  as a source on H-Net's ratio loss; it is a source on *H-Net-style* ratio losses, and the
+  specific failure it documents (ratio oscillating far from target, chunk length 200–1200
+  bytes vs 18) is the closest published analogue to our symptom.
 - **The paper's explicit judgement on the default ratio loss:** *"The standard boundary ratio
   loss (Eq. 3) often fails to learn linguistic boundaries in low-resource settings due to
   insufficient supervision signals."*
@@ -260,7 +296,12 @@ that RESEARCH.md §4.1 quotes correctly on substance, so the fix is to the title
 - **What was swept:** the auxiliary-loss weight λ on a MoE-style, H-Net-derived load-balancing
   loss (two "experts" = boundary vs non-boundary selections), on `ConceptMoE-A0.5B-12B`, 243B
   tokens, target compression R = 2.
-- **Source:** arXiv:2601.21420, §4.5.1 "Auxiliary loss weight", Figure 7.
+- **Source:** arXiv:2601.21420, §3.2 (auxiliary loss, Eq. 4), §4.5.1 "Auxiliary loss weight",
+  Figure 7.
+- **The loss form is H-Net's, verbatim:** `L_aux = R/(R−1)·((R−1)F₁G₁ + (1−F₁)(1−G₁))` — the
+  same Eq. (10) form as the H-Net paper, with F and G computed **per device** rather than
+  per sequence (§3.2: *"we aggregate statistics across all samples in the current devices
+  rather than averaging per-sample statistics"*).
 - **Quantitative effect:** λ ∈ {0.03, 0.1, 0.5, 1.0}. *"As λ increases, training loss degrades
   while all configurations achieve compression ratios close to 2."* They therefore set λ = 0.03
   for all other experiments.
@@ -492,11 +533,11 @@ except in the *opposite* direction from their creep-up.
 
 **The direction of our miss is the same as SOMBRERO's, and this matters for which fix applies.**
 Our realised compression is `1/F = 4.57` bytes/chunk against a target `N = 6`, i.e. we
-**under-compress** (too many boundaries), and we sit at the ratio loss's *upper* side of the
-target. SOMBRERO measured the same shape: `C_emp = 3.95` against `C_tar = 5.0`, again
-under-compressed, and fixed it by raising the ratio-loss weight from 0.03 to 1.0 (§1.1).
-ConceptMoE's "λ > 0.03 is unnecessary" (§1.10) does **not** transfer to us, because their
-target was already met at λ = 0.03. **Our reading, flagged as inference:** we are in
+**under-compress** (chunks are too short, too many boundaries), and our ratio loss sits
+*above* 1 (1.052). SOMBRERO measured the same shape: `C_emp = 3.95` against `C_tar = 5.0`,
+again under-compressed, and fixed it by raising the ratio-loss weight from 0.03 to 1.0
+(§1.1). ConceptMoE's "λ > 0.03 is unnecessary" (§1.10) does **not** transfer to us, because
+their target was already met at λ = 0.03. **Our reading, flagged as inference:** we are in
 SOMBRERO's regime, not ConceptMoE's, so the direction of the α intervention is the same as
 theirs — but their working value (1.0) is ~33× the paper's 0.03, and our α = 0.1 probe is
 only 3.3×.
@@ -571,17 +612,21 @@ Ranked by (evidence strength) × (fit to the specific symptom), all from §1.
      α ∈ {0.03, 0.1, 0.3, 1.0} with the bpb curve monitored, not just the ratio. If α = 1.0
      moves the ratio to target but costs bpb, that is a *different* trade from what we have
      now (neither a correct ratio nor a stable bpb).
-3. **Compute the ratio loss over accumulated micro-batches (global F/G), not per-sequence.**
-   §1.4. This is a **new arm**, cheap, no architecture change, and it targets something we
-   have not considered: our `kernel_q1/main.py:371–372` estimates F and G *per sequence*
-   (256 samples each) and averages 16 noisy per-sequence losses. Dynamic LCMs measured that
-   exact variant ("Normal") at realised ratio 3.15 vs target 4.0, and their "Global Parser",
-   which accumulates F and G over K micro-batches before forming the loss, reached **3.92**
-   (§1.4). Their framing — *"enforcing a fixed compression ratio per sequence is overly
-   restrictive"* — is a plausible explanation for why our per-sequence F sits at 0.219 and
-   refuses to move: each sequence's loss is individually satisfiable at the wrong global rate.
-   **Do this before, or simultaneously with, changing α** — otherwise an α sweep confounds
-   two things.
+3. **Aggregate the ratio-loss statistics over the batch instead of per sequence.** §1.4.
+   This is a **new arm**, cheap, no architecture change, and it targets something we have not
+   considered. Our `kernel_q1/main.py:371–372` estimates F and G *per sequence* (256 samples
+   each) and averages 16 noisy per-sequence losses. That is the variant Dynamic LCMs call
+   *"Normal"*, measured at realised ratio 3.15 vs target 4.0; their *"Global Parser"*, which
+   accumulates F and G over K micro-batches before forming the loss, reached **3.92** (§1.4).
+   Their framing — *"enforcing a fixed compression ratio per sequence is overly restrictive"* —
+   is a plausible explanation for why our per-sequence F sits at 0.219 and refuses to move:
+   each sequence's loss is individually satisfiable at the wrong global rate.
+   **Two separate fixes are available and both are one-line changes:**
+   (a) match the **official H-Net** — aggregate F and G over the whole device batch
+   (`goombalab/hnet` `hnet/utils/train.py:34–35`) — which our code currently does *not* do;
+   (b) adopt the **Dynamic LCMs** global-across-micro-batches variant.
+   Do (a) at minimum, before or simultaneously with changing α — otherwise an α sweep
+   confounds two things.
 4. **Curriculum on N (ATDC-style), i.e. ramp the target rather than the weight.**
    §1.3 is the only source that combines a *stable trajectory* claim with a *stable settled
    value* and a *reported final BPB*, and it directly addresses a ratio that must travel a long
@@ -628,14 +673,22 @@ Ranked by (evidence strength) × (fit to the specific symptom), all from §1.
   `2(N−1)/N` (shutting down the main net) (§3). At N = 6 the lower bound is 1.667, so our
   1.03–1.05 sits in the benign band — it means "not converged", not "broken".
 
-### 4.4 Two checks on our own setup that the sources imply, before spending more compute
+### 4.4 Three checks on our own setup that the sources imply, before spending more compute
 
+- **Are we computing the ratio loss the way the official code does?** The official
+  `goombalab/hnet` aggregates F and G over the whole device batch
+  (`hnet/utils/train.py:34–35`); our `kernel_q1/main.py:371–372` computes them **per sequence**
+  and averages. This is a one-line fix and it is the highest-value thing on this list,
+  because §1.4 shows the per-sequence variant is the one that lands at 3.15 against a target
+  of 4.0. **Do this first, before the α sweep, so the two are not confounded.**
 - **Are we actually running the paper's smoothing module?** The paper's own ablation says
   removing it makes *"compression ratios fluctuate severely throughout training"* (§1.14). Our
   `kernel_q1/main.py:271–291` implements an EMA over main-network outputs with a STE gate,
   which looks like the paper's Eq. 5 — but the *chunk-level vs byte-level* distinction that
   SOMBRERO makes (§1.2) is worth checking explicitly, because the paper's version ignores
-  non-boundary confidences.
+  non-boundary confidences. Note also that our implementation gates on `c = where(bmask, p,
+  1−p)` computed over the *byte* grid, so the confidence term is already per-byte in the
+  gating, but the *EMA* (`chunked_scan` at `:286`) still runs over the chunk sequence.
 - **Is our residual projection zero-init?** `kernel_q1/main.py:256–258` does
   `nn.init.zeros_(self.residual_proj.weight)`, matching the official code
   (`goombalab/hnet` `hnet/models/hnet.py:106`). Good. But main-horse notes the paper's
@@ -676,8 +729,9 @@ Ranked by (evidence strength) × (fit to the specific symptom), all from §1.
    that computing the loss on each example is better, or that computing the statistics over the
    entire (global) batch would have been better."*
    (`goombalab/hnet` `hnet/utils/train.py:20–22`). Dynamic LCMs (§1.4) tested the global
-   variant in a different architecture and found it better; nobody has tested it in H-Net
-   proper.
+   variant in a different architecture and found it better; ConceptMoE (§1.10) uses
+   device-aggregated statistics without ablation; nobody has tested it in H-Net proper, and
+   **our own implementation matches neither the official nor the tested variant** (§4.4).
 7. **The relationship between "N_compress appearing nowhere in the official repo" and the
    reproducibility of these results.** The official code ships `N_compress` only as a config
    field with defaults `([1], [1,5], [1,3,9])` by hierarchy depth
@@ -692,7 +746,7 @@ Ranked by (evidence strength) × (fit to the specific symptom), all from §1.
    notes: arXiv:2503.01067 is *"All Roads Lead to Likelihood: The Value of Reinforcement
    Learning in Fine-Tuning"* and contains nothing about H-Net or compression. The
    boundary-ratio-in-low-resource finding RESEARCH.md cites is real but belongs to
-   arXiv:2608.27658. **Recommend fixing that citation in `docs/RESEARCH.md` before it
+   arXiv:2608.27659. **Recommend fixing that citation in `docs/RESEARCH.md` before it
    propagates.**
 10. **No source addresses the "bpb destabilises *after* step 3200 while the ratio is still
     stuck" combination.** The late-training instability that main-horse attributes to
@@ -834,3 +888,34 @@ Two corrections to existing repo notes are recorded above and should be applied 
    down made runs worse"; it states that cranking the weight did not stop the spiking runs
    from winning.
 
+
+
+---
+
+## Addendum (2026-10-31, verified against the official source)
+
+§5 item 6 records the per-sequence versus global ratio-loss question as unresolved, quoting the
+official code's own comment. The **shipped** code resolves it, and in our favour:
+
+```python
+# goombalab/hnet, hnet/utils/train.py, load_balancing_loss
+true_ratio = boundary_mask.float().mean()      # mean over EVERY element of the minibatch
+average_prob = tokenized_prob.float().mean()   # mean over EVERY element
+return ((1 - true_ratio) * (1 - average_prob)
+        + (true_ratio) * (average_prob) * (N - 1)) * N / (N - 1)
+```
+
+That is **one global F and one global G over the whole minibatch**, then the loss — not
+per-sequence statistics whose losses are averaged. Our implementation computes `Fs` and `G` per
+sequence (`bmask.float().mean(dim=1)`, `p.mean(dim=1)`) and averages the per-sequence losses.
+
+So the batch-aggregated arm is not a speculative variant: it is the official loss, and our
+per-sequence version is the deviation. Each of our per-sequence F and G is estimated from a
+single 256-byte sequence, and each sequence's loss is individually satisfiable at the wrong
+global rate — which is precisely the mechanism §4.1 inferred for our F/G mismatch. The official
+code's docstring comment ("It is possible that computing the loss on each example is better, or
+that computing the statistics over the entire (global) batch would have been better") is the
+authors recording their own uncertainty at the time; what they shipped is the global form.
+
+Consequence for the plan: the sweep's "global F/G" arm restores official behaviour rather than
+testing an idea, and the per-sequence arm should be labelled as our deviation.
