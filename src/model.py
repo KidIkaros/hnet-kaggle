@@ -197,6 +197,30 @@ class Router(nn.Module):
         return p, p >= 0.5
 
 
+def param_groups(model, mult_outer=1.0, mult_main=1.0):
+    """Per-stage learning-rate multipliers (paper Sec. 2.3: lambda_0=2.0, lambda_1=1.5).
+
+    The paper applies a multiplier to every parameter of a stage, and the official code applies
+    the main network's multiplier again on top. The outer networks (encoder, decoder, router,
+    chunk layer) are stage 0; the main network is stage 1. Our implementation had no LR
+    modulation at all, which is one of the four stability tricks it lists as load-bearing, and
+    the replication enables it for S>0 while disabling it for S=0.
+
+    Returns [(params, mult), ...] for the optimizer.
+    """
+    outer, main = [], []
+    for name, p in model.named_parameters():
+        if not p.requires_grad:
+            continue
+        (main if name.startswith("main.") else outer).append(p)
+    groups = []
+    if outer:
+        groups.append({"params": outer, "lr_mult": mult_outer, "name": "outer"})
+    if main:
+        groups.append({"params": main, "lr_mult": mult_main, "name": "main"})
+    return groups
+
+
 class STE(torch.autograd.Function):
     @staticmethod
     def forward(ctx, x):

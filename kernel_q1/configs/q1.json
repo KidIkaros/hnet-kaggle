@@ -1,15 +1,15 @@
 {
-  "d_model": 192,
+  "d_model": 128,
   "n_enc": 2,
-  "n_main": 3,
+  "n_main": 2,
   "n_dec": 2,
-  "d_ff": 768,
+  "d_ff": 512,
   "d_state": 16,
   "d_conv": 4,
   "scan_chunk": 64,
   "target_ratio": 6.0,
-  "alpha": 0.03,
-  "max_steps": 5000,
+  "alpha": 0.1,
+  "max_steps": 3000,
   "seq_len": 256,
   "batch": 16,
   "lr": 0.001,
@@ -19,20 +19,22 @@
   "seeds": [
     0
   ],
-  "eval_every": 500,
-  "log_every": 50,
+  "arms": [
+    "hnet"
+  ],
+  "eval_every": 250,
+  "log_every": 25,
+  "wall_guard_s": 7200,
   "languages": [
     "eng",
+    "deu",
     "rus",
     "cmn",
     "jpn",
     "arb"
   ],
-  "params_target": 2430000.0,
-  "note": "SCALE LADDER rung 1: 2.43M params (2.9x the 0.84M baseline), same 5-language mixture as the matched-N invariance run. Question: is the byte phase stable across scale, and does character alignment appear once the model is bigger?",
-  "arms": [
-    "hnet"
-  ],
-  "wall_guard_s": 9000,
-  "sweep_ratios": null
+  "params_target": 840000.0,
+  "seeds_run_as": "one kernel per seed (mauricew/hnet-q1-s0, -s1): 3.25 s/step measured > 1.4 estimated, so a single 6 h guard would truncate both below the 5000-step floor",
+  "sweep_ratios": null,
+  "note": "stronger ratio loss (alpha 0.1 vs 0.03)"
 }

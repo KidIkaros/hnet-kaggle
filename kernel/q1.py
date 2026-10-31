@@ -114,7 +114,10 @@ def run_seed(seed, deadline, ratio=None):
     cfg = HNetConfig(**fields)
     model = HNetLM(cfg).to(DEV)
     init_weights(model)
-    opt = torch.optim.AdamW(model.parameters(), lr=CFG["lr"],
+    mo = float(CFG.get("lr_mult_outer", 1.0))
+    mm = float(CFG.get("lr_mult_main", 1.0))
+    groups = param_groups(model, mo, mm)
+    opt = torch.optim.AdamW(groups, lr=CFG["lr"],
                             weight_decay=CFG["wd"], betas=(0.9, 0.95))
     stream = Stream(np.random.default_rng(seed), CFG["batch"], CFG["seq_len"])
     history, evals = [], []
@@ -130,7 +133,7 @@ def run_seed(seed, deadline, ratio=None):
         loss.backward()
         gn = nn.utils.clip_grad_norm_(model.parameters(), CFG["clip"])
         for g in opt.param_groups:
-            g["lr"] = lr_at(step, CFG)
+            g["lr"] = lr_at(step, CFG) * g.get("lr_mult", 1.0)
         opt.step()
         done = step + 1
 

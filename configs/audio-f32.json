@@ -1,9 +1,30 @@
 {
-  "d_model": 128, "n_enc": 2, "n_main": 2, "n_dec": 2, "d_ff": 512,
-  "d_state": 16, "d_conv": 4, "scan_chunk": 64,
-  "target_ratio": 6.0, "alpha": 0.03, "max_steps": 5000,
-  "seq_len": 1024, "batch": 16, "lr": 0.001, "warmup": 200, "wd": 0.1, "clip": 1.0,
-  "seeds": [0], "arms": ["f32le"], "eval_every": 500, "log_every": 50,
-  "wall_guard_s": 36000, "params_target": 840000.0,
-  "note": "f32le only, on CPU: this arm died on a GPU OOM at step 100, and the OOM is a GPU problem -- on CPU it is just slower (~4 s/step at seq 1024)"
+  "d_model": 128,
+  "n_enc": 2,
+  "n_main": 2,
+  "n_dec": 2,
+  "d_ff": 512,
+  "d_state": 16,
+  "d_conv": 4,
+  "scan_chunk": 64,
+  "target_ratio": 6.0,
+  "alpha": 0.03,
+  "max_steps": 5000,
+  "seq_len": 1024,
+  "batch": 4,
+  "lr": 0.001,
+  "warmup": 200,
+  "wd": 0.1,
+  "clip": 1.0,
+  "seeds": [
+    0
+  ],
+  "arms": [
+    "f32le"
+  ],
+  "eval_every": 500,
+  "log_every": 50,
+  "wall_guard_s": 36000,
+  "params_target": 840000.0,
+  "note": "f32le only, on GPU: the seq-1024 arm OOMed at batch 16 (14.5 GiB of activations at chunk resolution); batch 4 is a 4x reduction. CPU cannot reach 5000 steps at seq 1024 inside Kaggle's 12 h cap -- a CPU run reached only step 2154 -- so this arm gets the GPU."
 }

@@ -4,10 +4,24 @@ Label: `wayfinder:map` · Effort: `hnet-kaggle` · Charted 2026-10-29
 
 ## Destination
 
-A Kaggle-only pipeline that answers **one defensible claim** about learned chunking — first on
-multilingual bytes, then on whether the answer is about language or about serialized data in
-general. Verdict first, artifact second. "Done" = a result table with a stated falsifier, a
-working harness, and a statement of what the finding generalises to.
+A Kaggle-only pipeline that tests **Cartesia's efficiency claim** — the compute multiplier of a
+byte-level H-Net against a fixed-tokenizer baseline, and whether that advantage grows as the
+tokenizer degrades on non-Latin scripts — with the mechanism work already banked serving as the
+prior and as a source of falsifiable predictions.
+
+**The mechanism work is not the point; it is the setup.** The user's standing correction (2026-10-31):
+building the H-Net was supposed to test the efficiency claim, and the effort spent its first weeks
+characterising the chunker instead. What we have from that is real and published (a byte-phase
+finding in three modalities), but it cannot substitute for the comparison that was always meant to
+happen. The baselines — a BPE Transformer and a byte Transformer — did not exist until now, and
+without them no claim about efficiency can be made at all.
+
+**Standing reading of the papers** (from `docs/RESEARCH.md`, 2026-10-29): Cartesia's 1.28x
+compute multiplier is measured at 1e19-1e21 FLOPs with a protocol an independent replication
+criticised on four counts; that replication found no H-Net compute advantage at 1e16-1e18. The
+replication is English-only, and the untested question that a small budget can still address is
+whether the H-Net's advantage grows as the fixed tokenizer degrades — largest in Chinese, Arabic
+and Russian.
 
 **The claim has moved twice and is now modality-general.** It started as "the chunker learns
 characters"; the invariance test killed that; the byte-phase analysis replaced it with "learned
@@ -122,6 +136,16 @@ below exists to test.
   falsifier; failure is reported as a statement about 8M params, not about H-Net.
 
 ## Frontier
+
+- **The efficiency comparison (wayfinder:task, GPU+CPU)** — three arms on the same bytes:
+  BPE Transformer (the incumbent), byte Transformer (no hierarchy), byte H-Net (ours). Common
+  currency is bpb; FLOPs/byte from `src/flops.py` and `src/baseline.py`. Languages eng (control),
+  cmn and arb (where a fixed tokenizer is worst). Two rungs so there is a curve, not a point.
+  *Prediction from our own mechanism work:* H-Net ties the byte Transformer on Chinese, and any
+  H-Net-vs-BPE advantage there comes from BPE's degradation rather than from the chunker learning
+  anything. If H-Net beats the byte Transformer on Chinese, the byte-phase finding is wrong.
+- **BPE tokenizers (wayfinder:task, CPU)** — in-corpus byte-level BPE per language, 16k vocab;
+  `src/bpe.py`.
 
 - **Scale ladder — DONE** ([ticket 22](issues/22-scale-ladder.md)): 2.43 M parameters, UTF-8 and
   UTF-16 arms. **Not one sign flips**; the cross-encoding reversal survives at 2.9x scale, so the

@@ -1,0 +1,21 @@
+{
+  "id": "mauricew/hnet-audio-f32gpu",
+  "title": "hnet audio f32gpu",
+  "code_file": "main.py",
+  "language": "python",
+  "kernel_type": "script",
+  "is_private": true,
+  "enable_gpu": true,
+  "enable_tpu": false,
+  "enable_internet": false,
+  "keywords": [
+    "audio",
+    "chunking"
+  ],
+  "dataset_sources": [
+    "mauricew/hnet-audio-bytes"
+  ],
+  "kernel_sources": [],
+  "competition_sources": [],
+  "model_sources": []
+}
