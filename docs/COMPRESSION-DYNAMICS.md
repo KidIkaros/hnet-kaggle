@@ -6,8 +6,16 @@ the target ratio instead of oscillating — and what did each measurably do?
 
 Our symptom (from our own checkpoints, `kernel_q1/`): mean boundary probability `G = 0.305`
 against a target of `1/6 = 0.167`; selected fraction `F = 0.219`; ratio loss never below
-~1.03; validation bpb 2.27 at step 3200 rising back to 2.46 by step 4800. We are missing the
-paper's per-stage LR multipliers.
+~1.03; realised compression 4.56 bytes/chunk against a target of 6. We are missing the paper's
+per-stage LR multipliers.
+
+**Correction, 2026-10-31.** The symptom above originally also included "validation bpb 2.27 at
+step 3200 rising back to 2.46 by step 4800". That was a misreading of the *logged per-batch*
+cross-entropy, which moves with each batch's language mix. Measured on fixed validation windows,
+bpb descends monotonically in every run we have — the 2.43 M run goes 2.882 -> 2.292 with no late
+rise. **The model converges; the compression target is what is missed.** Every conclusion in this
+document that leaned on the loss "destabilising" needs re-reading against the validation curve,
+and the sweep that follows treats the ratio, not the loss curve, as the thing to fix.
 
 Every entry below is a *published* intervention with a source. Nothing here is our own
 proposal; the "Synthesis" section at the end is explicitly ours and separately labelled.

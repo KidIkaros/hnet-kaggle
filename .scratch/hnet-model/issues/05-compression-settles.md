@@ -15,7 +15,7 @@ rests on.
 - [ ] The gap between F and G is reported, not just their values. The paper expects F to converge toward G as routing becomes confident; a large persistent gap means the router's probabilities are diffuse rather than bimodal, which points at a different fix than more ratio-loss weight.
 - [ ] F and G both reach within a stated tolerance of 1/N and remain there across the final quarter of the run.
 - [ ] The ratio loss reaches within a stated tolerance of its minimum of 1, and stays there.
-- [ ] Validation bpb shows no rise across the final quarter of the run.
+- [ ] Validation bpb on fixed validation windows is monotone across the run. It already is, in every run we have — the logged per-batch loss is not this metric and moves with each batch's language mix, so the two must not be confused.
 - [ ] Realised bytes per chunk sits at the target rather than under or over it.
 - [ ] The result is reported as a comparison against the current best run's bpb, with the tolerance stated in advance.
 - [ ] The reading is written into the write-up's model section, not only into a ticket.

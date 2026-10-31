@@ -11,10 +11,18 @@ We have a from-scratch, pure-PyTorch reimplementation of a hierarchical byte-lev
 model. It runs, it trains, and it produces interesting measurements — but it does not produce a
 model. Three things stand between it and a usable artifact:
 
-**It does not converge.** The chunker's compression never settles. In our longest run the mean
-boundary probability sat at 0.305 against a target of 0.167, the ratio loss never dropped below
-about 1.03, and validation bpb fell to 2.27 by step 3200 then climbed back to 2.46 by step 4800.
-A run that destabilises is not a model, whatever its other statistics say.
+**Its compression does not reach its target.** The chunker's boundary statistics settle well away
+from where they should be: in our longest run the mean boundary probability sat at 0.305 against
+a target of 0.167, the ratio loss never dropped below about 1.03, and the realised compression
+was 4.56 bytes per chunk against a target of 6 — a 24% miss in the wrong direction.
+
+*Corrected 2026-10-31:* an earlier draft of this spec also claimed the loss destabilised late in
+training, on the strength of the logged per-batch loss. That was a misreading: the logged loss is
+one batch's cross-entropy, and it moves with that batch's language mix. Measured on fixed
+validation windows, bpb descends monotonically in every run we have — the 2.43 M run goes
+2.882 -> 2.292 with no late rise, and the two arms of the current sweep go 3.092 -> 2.476 and
+3.070 -> 2.446. **The model converges.** The gap is the compression target, not stability, and
+the programme is narrower than this spec first claimed.
 
 **It is too slow to reach a comparable rung.** At roughly 1e11 FLOPS on a T4, against the ~1e13 a
 tensor-core implementation reaches, a 1e16-FLOP run costs a week of quota. The published
@@ -50,8 +58,9 @@ state plainly what we cannot.
    training run from a broken one without reading every log.
 2. As a researcher, I want the router's boundary probability to converge to the compression
    target, so that the model holds its intended compression instead of drifting.
-3. As a researcher, I want validation bpb to descend monotonically once the run has settled, so
-   that late-training destabilisation is caught immediately rather than at the end.
+3. As a researcher, I want the logged loss and the validation loss kept distinct, so that a
+   single batch's language mix is never mistaken for instability — the two move differently, and
+   only the second says anything about the model.
 4. As a researcher, I want the ratio loss to reach its theoretical minimum of 1, so that the
    compression target is being met rather than fought.
 5. As a researcher, I want per-stage learning-rate multipliers implemented as the reference

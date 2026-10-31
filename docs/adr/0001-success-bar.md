@@ -5,8 +5,8 @@ status: accepted
 # The success bar for this effort is a usable model, not a number
 
 The bar is three things together, not one: the training dynamics must settle (F and G reach
-1/N and stay, the loss stops destabilising), the model must reach quality verifiable against
-published numbers, and it must generate usable text. The end state is a real, tangible model
+1/N and stay), the model must reach quality verifiable against published numbers, and it must
+generate usable text. The end state is a real, tangible model
 that could stand in for a tokenizer in someone else's pipeline — not a concept and not a
 demonstration.
 
