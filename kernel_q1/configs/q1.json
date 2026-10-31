@@ -7,7 +7,7 @@
   "d_state": 16,
   "d_conv": 4,
   "scan_chunk": 64,
-  "target_ratio": 4.5,
+  "target_ratio": 6.0,
   "alpha": 0.03,
   "max_steps": 5000,
   "seq_len": 256,
@@ -17,7 +17,7 @@
   "wd": 0.1,
   "clip": 1.0,
   "seeds": [
-    0
+    1
   ],
   "arms": [
     "hnet"
@@ -36,12 +36,5 @@
   "params_target": 840000.0,
   "seeds_run_as": "one kernel per seed (mauricew/hnet-q1-s0, -s1): 3.25 s/step measured > 1.4 estimated, so a single 6 h guard would truncate both below the 5000-step floor",
   "sweep_ratios": null,
-  "n_curriculum": {
-    "from": 4.5,
-    "to": 6.0,
-    "tau": 0.05,
-    "gamma": 1.05,
-    "window": 100
-  },
-  "note": "ATDC-style curriculum on the target ratio, 4.5 -> 6.0"
+  "note": "iteration 2: second seed of the control, so the LR-multiplier gain has a matched-seed comparison"
 }

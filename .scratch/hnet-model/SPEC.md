@@ -148,6 +148,18 @@ rather than gambled on.
 target ratio, the fix is in the optimisation, not in moving the target — though a curriculum that
 *ramp* to the target is an allowed mechanism, because it ends at the same target.
 
+**The first dynamics sweep, and what it decided.** Five arms at 0.84 M parameters, 5000 steps,
+CPU, with the published interventions applied one at a time. The per-stage learning-rate
+multipliers were the only arm that improved *both* quality and compression — validation bpb 2.362
+against the control's 2.453, with realised compression 5.11 bytes per chunk against 4.27. Raising
+the ratio-loss weight to 1.0 landed the compression exactly (5.91 bytes per chunk, ratio loss
+1.003) but cost 0.023 bpb, which is the trade the literature warns about. The target-ratio
+curriculum was a no-op on the compression, because at the default weight the ratio loss is too
+weak to track a moving target. The official batch-aggregated loss, which the primary-source
+catalogue expected to help, made things slightly worse — a negative result for the official
+formulation in our setup, against an open question in the official code's own comments. The
+second iteration combines the two winners and repeats the best arm on a second seed.
+
 **The interventions come from the published record, not from our own invention.** A cited
 catalogue of every published intervention for the same failure — with the ones reported as not
 helping, and the numbers behind each — is the reference for the dynamics work. Where two sources
