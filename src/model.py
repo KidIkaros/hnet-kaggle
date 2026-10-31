@@ -388,6 +388,11 @@ class HNetConfig:
     vocab: int = 256
     scan_chunk: int = 64
     tie_embeddings: bool = True
+    # Recompute the SSM blocks in the backward pass instead of keeping them. The scan's
+    # activations are B x L x d_model x d_state floats, and the chunked scan keeps several
+    # rounds of them alive, so at long sequence lengths the activation memory, not the
+    # parameter memory, is what the run is limited by.
+    grad_checkpoint: bool = False
 
 
 class HNetLM(nn.Module):
@@ -419,7 +424,10 @@ class HNetLM(nn.Module):
         B, L = idx.shape
         x = self.emb(idx)
         for blk in self.encoder:
-            x = x + blk(x)
+            if self.cfg.grad_checkpoint and self.training:
+                x = x + torch.utils.checkpoint.checkpoint(blk, x, use_reentrant=False)
+            else:
+                x = x + blk(x)
 
         p, bmask = self.router(x)
         residual = self.chunk_layer.residual_proj(x)               # (B,L,D) fp32
@@ -442,7 +450,10 @@ class HNetLM(nn.Module):
 
         y = dec
         for blk in self.decoder:
-            y = y + blk(y)
+            if self.cfg.grad_checkpoint and self.training:
+                y = y + torch.utils.checkpoint.checkpoint(blk, y, use_reentrant=False)
+            else:
+                y = y + blk(y)
         logits = self.head(self.norm_f(y))
 
         N = self.cfg.target_ratio

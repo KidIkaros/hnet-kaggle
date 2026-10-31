@@ -8,6 +8,7 @@ OUT = os.path.join(ROOT, "kernel_q1")
 os.makedirs(OUT, exist_ok=True)
 
 model = re.sub(r'^""".*?"""\n', "", open(os.path.join(ROOT, "src", "model.py")).read(), flags=re.S)
+flops = re.sub(r'^""".*?"""\n', "", open(os.path.join(ROOT, "src", "flops.py")).read(), flags=re.S)
 driver = open(os.path.join(ROOT, "kernel", "q1.py")).read()
 driver = driver.split("# ==== DATA ====", 1)[1]
 head = open(os.path.join(ROOT, "kernel", "q1.py")).read().split("# ==== DATA ====")[0]
@@ -23,7 +24,7 @@ json.dump(cfg, open(os.path.join(OUT, "configs", "q1.json"), "w"), indent=2)
 head = head.replace('os.environ.get("CONFIG", "configs/q1.json")', 'os.environ.get("CONFIG", "/tmp/q1.json")')
 inline_cfg = f'\nopen("/tmp/q1.json", "w").write({json.dumps(json.dumps(cfg))})\n'
 
-out = ("import json\n" + inline_cfg + head + model + "\n# ==== DATA ====" + driver)
+out = ("import json\n" + inline_cfg + head + model + "\n" + flops + "\n# ==== DATA ====" + driver)
 open(os.path.join(OUT, "main.py"), "w").write(out)
 
 json.dump({f"id": f"mauricew/hnet-{tag}", "title": f"hnet {tag}", "code_file": "main.py",

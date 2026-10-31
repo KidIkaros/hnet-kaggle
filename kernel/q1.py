@@ -218,11 +218,28 @@ def run_seed(seed, deadline, ratio=None):
     tag = f"s{seed}" if ratio is None else f"s{seed}-n{ratio:g}"
     torch.save({"config": dict(cfg.__dict__), "seed": seed,
                 "state": model.state_dict()}, os.path.join(OUT, f"ckpt-{tag}.pt"))
+    # What the run actually cost, next to what it was allowed to cost. The realised chunk
+    # length is what the accounting assumed it would not be, so the two are both recorded.
+    realised_chunk = None
+    for e in reversed(evals):
+        vals = [v.get("bytes_per_chunk") for v in e.get("per_language", {}).values()]
+        vals = [v for v in vals if v]
+        if vals:
+            realised_chunk = sum(vals) / len(vals)
+            break
+    flops = dict(CFG.get("_flops_report") or {})
+    if flops and realised_chunk:
+        fields = {k: v for k, v in CFG.items() if k in HNetConfig.__dataclass_fields__}
+        c2 = HNetConfig(**fields)
+        realised_fpb = training_flops_per_byte(c2, CFG["seq_len"], realised_chunk)
+        flops["realised_bytes_per_chunk"] = realised_chunk
+        flops["realised_training_flops_per_byte"] = realised_fpb
+        flops["realised_total_flops"] = done * CFG["batch"] * CFG["seq_len"] * realised_fpb
     json.dump({"seed": seed, "ratio": cfg.target_ratio, "stop": stop, "steps": done,
-               "history": history, "evals": evals},
+               "history": history, "evals": evals, "flops": flops},
               open(os.path.join(OUT, f"seed-{tag}.json"), "w"), indent=2)
     return model, {"seed": seed, "ratio": cfg.target_ratio, "stop": stop,
-                   "steps": done, "evals": evals}
+                   "steps": done, "evals": evals, "flops": flops}
 
 
 def examples(model, seed, per_lang=20, seq_len=192):
@@ -248,9 +265,37 @@ def examples(model, seed, per_lang=20, seq_len=192):
     return out
 
 
+def derive_budget():
+    """A FLOPs allowance becomes a step count, and the schedule follows from it.
+
+    The chunk length used here is the target ratio, not the realised one: a schedule has to be
+    fixed before the run starts. The realised value is recorded next to the metrics so the
+    two can be compared after the fact.
+    """
+    if not CFG.get("flops_budget"):
+        return None
+    fields = {k: v for k, v in CFG.items() if k in HNetConfig.__dataclass_fields__}
+    cfg = HNetConfig(**fields)
+    chunk_len = float(cfg.target_ratio)
+    steps, per_step = steps_for_budget(cfg, CFG["seq_len"], CFG["batch"], chunk_len,
+                                       float(CFG["flops_budget"]))
+    rep = flops_report(cfg, CFG["seq_len"], CFG["batch"], chunk_len)
+    rep["budget_flops"] = float(CFG["flops_budget"])
+    rep["derived_steps"] = steps
+    rep["training_flops_per_step"] = per_step
+    rep["budget_total_flops"] = steps * per_step
+    rep["budget_used_fraction"] = rep["budget_total_flops"] / float(CFG["flops_budget"])
+    CFG["max_steps"] = steps
+    CFG["_flops_report"] = rep
+    log(f"flops budget {CFG['flops_budget']:.4e} -> {steps} steps "
+        f"({per_step:.4e} training FLOPs/step, {rep['training_flops_per_byte']:.4e} FLOPs/byte)")
+    return rep
+
+
 # ==== MAIN ====
 def main():
     log("device", DEV, "torch", torch.__version__)
+    derive_budget()
     log("config", json.dumps(CFG))
     t_start = time.time()
     summary = []
