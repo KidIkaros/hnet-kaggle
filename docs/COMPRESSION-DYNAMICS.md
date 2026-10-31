@@ -927,3 +927,22 @@ authors recording their own uncertainty at the time; what they shipped is the gl
 
 Consequence for the plan: the sweep's "global F/G" arm restores official behaviour rather than
 testing an idea, and the per-sequence arm should be labelled as our deviation.
+
+### A structural property of the loss, found while reading the sweep
+
+Rewriting Eq. (10) as `L = N/(N-1) · [N·F·G + 1 - F - G]` shows that **L is exactly 1 whenever
+F = 1/N, for any G — and also exactly 1 whenever G = 1/N, for any F.** The loss therefore has a
+*cross* of exact minima, not a single point, and it cannot distinguish "the right number of
+boundaries" from "the right mean probability".
+
+Our own measurements show the consequence. The alpha = 1.0 arm reaches F = 0.169 against a target
+of 0.167 with a ratio loss of 1.003 — which reads as perfectly settled — while G sits at 0.298, a
+76% gap. The paper's expectation that "F naturally converges toward G" is therefore not enforced
+by the loss; it is a property the loss is indifferent to once either coordinate lands.
+
+Two implications. (a) "the compression settles" is not sufficient as an acceptance criterion: the
+F-vs-G gap has to be tracked as its own metric, which is now a ticket criterion. (b) Interventions
+that only add *pressure* to F and G cannot be expected to close that gap, since the loss stops
+providing gradient as soon as either coordinate is on target — which strengthens the case for the
+interventions that change the *shape* of the score distribution (byte-level smoothing, §1.2)
+rather than its magnitude.
