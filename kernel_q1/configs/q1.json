@@ -1,9 +1,9 @@
 {
-  "d_model": 128,
+  "d_model": 192,
   "n_enc": 2,
-  "n_main": 2,
+  "n_main": 3,
   "n_dec": 2,
-  "d_ff": 512,
+  "d_ff": 768,
   "d_state": 16,
   "d_conv": 4,
   "scan_chunk": 64,
@@ -17,24 +17,22 @@
   "wd": 0.1,
   "clip": 1.0,
   "seeds": [
-    1
+    0
   ],
+  "eval_every": 500,
+  "log_every": 50,
+  "languages": [
+    "eng",
+    "rus",
+    "cmn",
+    "jpn",
+    "arb"
+  ],
+  "params_target": 2430000.0,
+  "note": "SCALE LADDER rung 1: 2.43M params (2.9x the 0.84M baseline), same 5-language mixture as the matched-N invariance run. Question: is the byte phase stable across scale, and does character alignment appear once the model is bigger?",
   "arms": [
     "hnet"
   ],
-  "eval_every": 250,
-  "log_every": 25,
-  "wall_guard_s": 21600,
-  "languages": [
-    "cmn",
-    "cmn_sp3",
-    "cmn_sp6",
-    "rus",
-    "arb"
-  ],
-  "params_target": 840000.0,
-  "sweep_ratios": [
-    4.0
-  ],
-  "note": "delimiter-landmark test (CPU): seed 1 only; seed 0 completed in the previous run (examples() crashed afterwards, before seed 1 started)"
+  "wall_guard_s": 9000,
+  "sweep_ratios": null
 }
