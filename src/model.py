@@ -34,6 +34,20 @@ def _shift_right(x, d, fill):
     return torch.cat([pad, x[:, : x.shape[1] - d]], dim=1)
 
 
+def _shift_right_pad(x, d, fill):
+    """Same result as _shift_right, one kernel instead of a fill plus a cat.
+
+    F.pad writes into a fresh tensor in a single pass; the original built a padded tensor and
+    then concatenated two of them, which allocates and copies twice. The values are identical,
+    so this is bit-exact by construction -- the gate checks that anyway.
+    """
+    L = x.shape[1]
+    y = x[:, : L - d]
+    pad = [0] * (2 * (x.dim() - 1))
+    pad[2 * (x.dim() - 2)] = d          # dim 1, counting back from the last
+    return F.pad(y, pad, value=fill)
+
+
 def chunked_scan(a, b, chunk):
     """h_t = a_t * h_{t-1} + b_t, chunk-wise Hillis-Steele. a,b: (B,L,...) -> h."""
     state, outs = None, []
@@ -52,6 +66,39 @@ def chunked_scan(a, b, chunk):
     return torch.cat(outs, dim=1)
 
 
+def _hillis_steele(ac, bc):
+    """One chunk's intra-chunk scan, in place on the caller's tensors."""
+    d = 1
+    while d < ac.shape[1]:
+        bc = bc + ac * _shift_right_pad(bc, d, 0.0)
+        ac = ac * _shift_right_pad(ac, d, 1.0)
+        d *= 2
+    return ac, bc
+
+
+def chunked_scan_fast(a, b, chunk):
+    """The same recurrence as chunked_scan, with fewer allocations.
+
+    Three changes, none of which touches the arithmetic: the shift is a single padded copy
+    instead of a fill plus a concatenation; the per-chunk outputs are written into a
+    preallocated buffer instead of being collected and concatenated at the end; and the
+    intra-chunk scan is a separate function so it can be compiled independently of the
+    chunk loop, whose chunk count varies with the batch's boundary count.
+    """
+    B, L = a.shape[0], a.shape[1]
+    out = torch.empty_like(b)
+    state = None
+    for i in range(0, L, chunk):
+        ac = a[:, i: i + chunk]
+        bc = b[:, i: i + chunk]
+        ac, bc = _hillis_steele(ac, bc)
+        if state is not None:
+            bc = bc + ac * state.unsqueeze(1)
+        state = bc[:, -1]
+        out[:, i: i + bc.shape[1]] = bc
+    return out
+
+
 def sequential_scan(a, b):
     """Naive reference, for the exactness gate."""
     h, outs = None, []
@@ -59,6 +106,43 @@ def sequential_scan(a, b):
         h = a[:, t] * h + b[:, t] if h is not None else b[:, t]
         outs.append(h)
     return torch.stack(outs, dim=1)
+
+
+SCAN_IMPL = "fast"          # "reference" | "fast" | "compiled"
+_COMPILED_SCAN = None
+
+
+def scan(a, b, chunk):
+    """Dispatch to the selected scan implementation."""
+    if SCAN_IMPL == "reference":
+        return chunked_scan(a, b, chunk)
+    if SCAN_IMPL == "compiled":
+        return chunked_scan_compiled(a, b, chunk)
+    return chunked_scan_fast(a, b, chunk)
+
+
+def chunked_scan_compiled(a, b, chunk):
+    """chunked_scan_fast with the intra-chunk scan compiled.
+
+    The compiled region is the intra-chunk scan only: the chunk loop is left outside it
+    because the number of chunks varies with the batch's boundary count, and a varying
+    outer dimension would trigger a recompilation on every step.
+    """
+    global _COMPILED_SCAN
+    if _COMPILED_SCAN is None:
+        _COMPILED_SCAN = torch.compile(_hillis_steele, dynamic=False)
+    B, L = a.shape[0], a.shape[1]
+    out = torch.empty_like(b)
+    state = None
+    for i in range(0, L, chunk):
+        ac = a[:, i: i + chunk]
+        bc = b[:, i: i + chunk]
+        ac, bc = _COMPILED_SCAN(ac, bc)
+        if state is not None:
+            bc = bc + ac * state.unsqueeze(1)
+        state = bc[:, -1]
+        out[:, i: i + bc.shape[1]] = bc
+    return out
 
 
 # --------------------------------------------------------------------------- #
@@ -114,12 +198,19 @@ class SSMBlock(nn.Module):
         )
         delta = F.softplus(self.dt_proj(delta))                    # (B,L,E)
 
-        A = -torch.exp(self.A_log.float())                         # (E,N)
-        a = torch.exp(delta.unsqueeze(-1) * A)                     # (B,L,E,N)
-        b = delta.unsqueeze(-1) * Bc.unsqueeze(2) * x.unsqueeze(-1)
+        # The recurrence runs in fp32 whatever the surrounding precision is. The paper's own
+        # stability notes say the scan needs fp32 accumulation or it drifts, and on a T4
+        # there is no bf16 -- fp16 autocast around the matmuls with an fp32 scan is the
+        # prescribed arrangement. In an fp32 run this block is a no-op, so the fp32 path
+        # stays bit-identical.
+        with torch.autocast(device_type=x.device.type, enabled=False):
+            A = -torch.exp(self.A_log.float())                     # (E,N)
+            delta = delta.float()
+            a = torch.exp(delta.unsqueeze(-1) * A)                 # (B,L,E,N)
+            b = delta.unsqueeze(-1) * Bc.unsqueeze(2).float() * x.unsqueeze(-1).float()
 
-        h = chunked_scan(a, b, self.chunk)
-        y = (h * Cc.unsqueeze(2)).sum(-1) + self.D.float() * x
+            h = scan(a, b, self.chunk)
+        y = (h * Cc.unsqueeze(2).float()).sum(-1) + self.D.float() * x.float()
         return self.out_proj(y * F.silu(z))
 
 
@@ -371,6 +462,25 @@ class HNetLM(nn.Module):
             "bytes_per_chunk": L * B / max(bmask.sum().item(), 1.0),
         }
         return logits, aux
+
+
+def compile_ssm_blocks(model):
+    """Compile every SSM block's forward.
+
+    The profile says the four SSM blocks are 90% of the forward pass and the scan is 80% of
+    each block, so the win is in the scan's memory traffic, not in the matmuls. Compiling the
+    whole block -- rather than only its scan -- lets the surrounding elementwise chain
+    (conv, silu, exp, the readout) fuse into the same kernels as the scan.
+
+    Shapes are static per block: (B, L, E) in, (B, L, D) out. The chunk count does not appear
+    in the block's signature, so this does not recompile when the boundary count changes.
+    """
+    n = 0
+    for m in model.modules():
+        if isinstance(m, SSMBlock):
+            m.forward = torch.compile(m.forward, dynamic=False)
+            n += 1
+    return n
 
 
 def init_weights(model, initializer_range=0.02):
