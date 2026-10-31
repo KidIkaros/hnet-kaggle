@@ -282,17 +282,18 @@ anything about the image would put boundaries on the same pixels; these do not.
 in both, so a signal-following chunker places boundaries at the same offsets and a
 byte-value-following chunker cannot.
 
-| arm | bytes/chunk | ms/chunk | onset lift |
-|---|---|---|---|
-| pcm16le | 5.56 | **0.35** | +0.003 |
-| pcm16be | 4.48 | **0.28** | -0.004 |
-| mulaw | 6.56 | **0.82** | -0.000 |
+| arm | bytes per sample | bytes/chunk | ms/chunk | onset lift |
+|---|---|---|---|---|
+| pcm16le | 2 | 5.56 | **0.348** | +0.003 |
+| pcm16be | 2 | 4.48 | **0.280** | -0.004 |
+| mulaw | 1 | 6.56 | **0.820** | -0.000 |
+| f32le | 4 | 4.79 | **0.150** | -0.002 |
 
-**Chunk length tracks bytes, not time.** All three arms land near the 6-byte ratio target
-(4.5-6.6 bytes), while the *duration* of a chunk varies by 2.9x between mu-law (0.82 ms) and
-16-bit (0.28-0.35 ms). A chunker that had learned anything about speech would hold duration
-roughly constant across encodings; this one holds the byte count and lets the duration float.
-Onset alignment is zero in every arm.
+**Chunk length tracks bytes, not time.** All four arms land near the 6-byte ratio target
+(4.5-6.6 bytes), while the *duration* of a chunk varies by **5.5x** across the four encodings --
+from 0.15 ms in 32-bit float to 0.82 ms in mu-law. A chunker that had learned anything about
+speech would hold duration roughly constant across encodings; this one holds the byte count and
+lets the duration float. Onset alignment is zero in every arm.
 
 **The byte-order test is the sharpest result in the study.** Boundaries at identical byte offsets
 agree at a Jaccard of **0.036, against a chance level of 0.114** -- well *below* chance. Shifting
@@ -310,11 +311,12 @@ alignment to the content -- edges, objects, onsets -- stays at zero.** The audio
 the mechanism: the phase is a byte-value class, off by exactly one byte between the two byte
 orders.
 
-**What is not measured.** The `f32le` arm died on a CUDA OOM at step 100 (three models resident
-plus 1024-byte sequences), so 32-bit float is unmeasured; `planar` and `gray` were not run at all.
-The image arm used one seed per encoding and 2,000 images, and the audio arm one seed per
-encoding. None of this changes the direction of the result -- three encodings agreeing at chance
-and one agreeing only when shifted by a byte is not a marginal effect -- but the f32 gap is a gap.
+**What is not measured.** The image arm used one seed per encoding and 2,000 images, and the
+audio arm one seed per encoding. The `f32le` arm was lost to a CUDA out-of-memory on the first
+attempt and re-run at a smaller batch; all four audio arms completed 5,000 steps. The
+`planar` and `gray` image encodings were also run after the fact and are reported above. None of
+this changes the direction of the result -- four encodings agreeing at chance, and one agreeing
+only when shifted by a byte, is not a marginal effect.
 
 ## What we killed
 
