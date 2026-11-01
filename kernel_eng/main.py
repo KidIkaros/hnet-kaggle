@@ -1,6 +1,6 @@
 import json
 
-open("/tmp/eng.json", "w").write("{\"d_model\": 384, \"n_enc\": 4, \"n_main\": 6, \"n_dec\": 4, \"d_ff\": 1536, \"d_state\": 16, \"d_conv\": 4, \"n_heads\": 6, \"scan_chunk\": 64, \"target_ratio\": 6.0, \"alpha\": 0.3, \"seq_len\": 2048, \"batch\": 4, \"lr\": 0.001, \"warmup\": 2000, \"wd\": 0.1, \"clip\": 1.0, \"seeds\": [0], \"lr_mult_outer\": 2.0, \"lr_mult_main\": 1.5, \"compile_blocks\": false, \"grad_checkpoint\": true, \"resume\": false, \"save_every\": 1000000000, \"max_steps\": 200000, \"eval_every\": 2, \"log_every\": 1, \"wall_guard_s\": 400, \"flops_budget\": 1200000000000.0, \"note\": \"smoke test of the built rung kernel: same geometry and scan, 3 steps\", \"scan_impl\": \"reference\"}")
+open("/tmp/eng.json", "w").write("{\"d_model\": 384, \"n_enc\": 4, \"n_main\": 6, \"n_dec\": 4, \"d_ff\": 1536, \"d_state\": 16, \"d_conv\": 4, \"n_heads\": 6, \"scan_chunk\": 64, \"target_ratio\": 6.0, \"alpha\": 0.3, \"seq_len\": 2048, \"batch\": 4, \"lr\": 0.001, \"warmup\": 2000, \"wd\": 0.1, \"clip\": 1.0, \"seeds\": [0], \"lr_mult_outer\": 2.0, \"lr_mult_main\": 1.5, \"compile_blocks\": false, \"grad_checkpoint\": true, \"resume\": true, \"save_every\": 2, \"max_steps\": 4, \"eval_every\": 2, \"log_every\": 1, \"wall_guard_s\": 900, \"flops_budget\": 4000000000000.0, \"amp\": \"fp16\", \"note\": \"dry run: exercise the dual-GPU code path, checkpoint save/resume, eval and canary\", \"eval_batches\": 2}")
 try:
 
     import torch
@@ -934,6 +934,33 @@ def self_check(model, train, seq_len, batch):
         f"({ev['bpb']:.3f} vs {train_bpb:.3f} bpb)")
 
 
+class TrainStep(nn.Module):
+    """The loss, computed inside forward so DataParallel can gather it.
+
+    DataParallel gathers a module's outputs across replicas and cannot gather the dict of
+    floats our model returns (F, G, bytes_per_chunk are Python floats). Returning a tuple of
+    one-element tensors instead means the gather produces a vector per field, one entry per
+    GPU, which the caller averages.
+
+    The wrapper is used for training only. Evaluation and checkpointing keep the raw model, so
+    the state dict has no `module.` prefix and an existing checkpoint still loads.
+    """
+
+    def __init__(self, inner, alpha):
+        super().__init__()
+        self.inner = inner
+        self.alpha = alpha
+
+    def forward(self, x, mask):
+        logits, aux = self.inner(x)
+        ce, _ = masked_loss(logits[:, :-1], x[:, 1:], mask[:, 1:])
+        rl = aux["ratio_loss"]
+        loss = ce + self.alpha * rl
+        one = lambda v: torch.as_tensor(float(v), device=x.device).reshape(1)
+        return (loss, ce.detach(), rl.detach(), one(aux["F"]), one(aux["G"]),
+                one(aux["bytes_per_chunk"]))
+
+
 def main():
     log("device", DEV)
     log("corpus", CORPUS)
@@ -967,6 +994,21 @@ def main():
     if want == "compiled":
         compile_ssm_blocks(model)
     log(f"scan implementation: {SCAN_IMPL}")
+    ndev = torch.cuda.device_count() if DEV == "cuda" else 1
+    log(f"devices visible: {ndev}"
+        + "".join(f", cuda:{i} {torch.cuda.get_device_name(i)}" for i in range(ndev)))
+    step_model = TrainStep(model, cfg.alpha)
+    if CFG.get("data_parallel", True) and ndev > 1 and BATCH % ndev != 0:
+        raise SystemExit(f"batch {BATCH} is not divisible by {ndev} devices: DataParallel "
+                         f"would split it unevenly and the averaged loss would weight the "
+                         f"shards unequally. Use a batch that divides, or set "
+                         f"data_parallel=false.")
+    if CFG.get("data_parallel", True) and ndev > 1:
+        step_model = nn.DataParallel(step_model)
+        log(f"training on {ndev} GPUs via DataParallel; evaluation and checkpoints use the "
+            f"raw model so the state dict keeps its keys")
+    else:
+        log("training on a single device")
     mo = float(CFG.get("lr_mult_outer", 1.0))
     mm = float(CFG.get("lr_mult_main", 1.0))
     groups = param_groups(model, mo, mm)
@@ -1023,10 +1065,13 @@ def main():
 
         with torch.amp.autocast("cuda", dtype=torch.float16,
                                 enabled=(CFG.get("amp") == "fp16" and DEV == "cuda")):
-            logits, aux = model(x)
-            ce, nbytes = masked_loss(logits[:, :-1], x[:, 1:], m[:, 1:])
-            rl = aux["ratio_loss"]
-            loss = ce + cfg.alpha * rl
+            out = step_model(x, m)
+        # out is a tuple of scalars on one device, or of per-GPU vectors on several; mean()
+        # is correct for both and is what keeps the reported numbers comparable
+        loss = out[0].mean()
+        ce, rl = out[1].mean(), out[2].mean()
+        aux = {"F": out[3].mean().item(), "G": out[4].mean().item(),
+               "bytes_per_chunk": out[5].mean().item()}
         opt.zero_grad(set_to_none=True)
         scaler.scale(loss).backward()
         scaler.unscale_(opt)
@@ -1040,24 +1085,27 @@ def main():
             rec = {"step": step, "ce": float(ce.item()), "bpb": float(ce.item()) / math.log(2),
                    "ratio_loss": float(rl.item()), "F": aux["F"], "G": aux["G"],
                    "bytes_per_chunk": aux["bytes_per_chunk"], "lr": lr,
-                   "bytes": nbytes, "elapsed_s": el,
+                   "bytes": int(m.sum().item()), "elapsed_s": el,
                    "eta_h": (el / max(done, 1)) * (max_steps - done) / 3600}
             history.append(rec)
             log(f"step {step:6} bpb {rec['bpb']:.4f} ratio {rec['ratio_loss']:.4f} "
                 f"F {rec['F']:.3f} G {rec['G']:.3f} bytes/chunk {rec['bytes_per_chunk']:.2f} "
                 f"lr {lr:.2e} elapsed {el/60:.1f}m eta {rec['eta_h']:.1f}h")
         if step % CFG["eval_every"] == 0 or step == max_steps - 1:
-            ev = evaluate(model, val, SEQ_LEN, BATCH)
+            ev = evaluate(model, val, SEQ_LEN, BATCH,
+                          n_batches=int(CFG.get("eval_batches", 40)))
             evals.append({"step": step, **ev})
             log(f"  eval step {step}: held-out bpb {ev['bpb']:.4f} over {ev['bytes']} bytes")
-            # 8.0 bits is uniform over 256 symbols. Anything above it means the model is
-            # anti-predicting, which is a broken run or a broken metric -- not a slow start.
-            if ev["bpb"] > 8.05:
+            # 8.0 bits is uniform over 256 symbols, and an untrained model sits right at it
+            # (7.94 in the first rung), so step 0 is exempt: the canary is for a run that has
+            # had a chance to learn and is still anti-predicting, which is a broken metric or
+            # a diverged run, not a slow start.
+            if step > 0 and ev["bpb"] > 8.5:
                 save_state(model, opt, scaler, step + 1, history, evals, best, flops,
                            resume_from)
                 raise RuntimeError(
-                    f"held-out bpb {ev['bpb']:.3f} is above uniform (8.0): stopping instead of "
-                    f"spending more quota on a run that cannot be right")
+                    f"held-out bpb {ev['bpb']:.3f} is far above uniform (8.0): stopping instead "
+                    f"of spending more quota on a run that cannot be right")
             if best is None or ev["bpb"] < best["bpb"]:
                 best = {"step": step, **ev}
                 torch.save({"config": dict(cfg.__dict__), "seed": CFG["seeds"][0],

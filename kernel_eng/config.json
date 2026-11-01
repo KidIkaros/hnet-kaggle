@@ -23,13 +23,14 @@
   "lr_mult_main": 1.5,
   "compile_blocks": false,
   "grad_checkpoint": true,
-  "resume": false,
-  "save_every": 1000000000,
-  "max_steps": 200000,
+  "resume": true,
+  "save_every": 2,
+  "max_steps": 4,
   "eval_every": 2,
   "log_every": 1,
-  "wall_guard_s": 400,
-  "flops_budget": 1200000000000.0,
-  "note": "smoke test of the built rung kernel: same geometry and scan, 3 steps",
-  "scan_impl": "reference"
+  "wall_guard_s": 900,
+  "flops_budget": 4000000000000.0,
+  "amp": "fp16",
+  "note": "dry run: exercise the dual-GPU code path, checkpoint save/resume, eval and canary",
+  "eval_batches": 2
 }
