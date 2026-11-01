@@ -17,21 +17,23 @@
   "wd": 0.1,
   "clip": 1.0,
   "seeds": [
-    0
+    0,
+    1
   ],
   "lr_mult_outer": 2.0,
   "lr_mult_main": 1.5,
-  "compile_blocks": true,
+  "compile_blocks": false,
   "grad_checkpoint": true,
   "resume": false,
   "save_every": 2,
-  "max_steps": 5,
-  "eval_every": 5,
+  "max_steps": 200000,
+  "eval_every": 2,
   "log_every": 1,
-  "wall_guard_s": 900,
-  "flops_budget": 2000000000000.0,
+  "wall_guard_s": 600,
+  "flops_budget": 1200000000000.0,
+  "note": "launcher dry run",
+  "scan_impl": "triton",
+  "data_parallel": false,
   "amp": "fp16",
-  "note": "dual-GPU smoke: DataParallel gather + compiled blocks + resume, 5 steps",
-  "eval_batches": 2,
-  "data_parallel": true
+  "eval_batches": 1
 }

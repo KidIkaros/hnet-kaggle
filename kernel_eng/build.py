@@ -42,7 +42,11 @@ json.dump(cfg, open(os.path.join(OUT, "config.json"), "w"), indent=2)
 inline_cfg = f'\nopen("/tmp/eng.json", "w").write({json.dumps(json.dumps(cfg))})\n'
 
 out = ("import json\n" + inline_cfg + scan + SHIM + model + "\n" + flops + "\n" + driver)
-open(os.path.join(OUT, "main.py"), "w").write(out)
+# The driver is eng_driver.py; main.py is the launcher that runs one job per GPU. Kaggle runs
+# a single code_file, so the launcher has to be the entry point.
+open(os.path.join(OUT, "eng_driver.py"), "w").write(out)
+open(os.path.join(OUT, "main.py"), "w").write(
+    open(os.path.join(ROOT, "kernel", "eng_par.py")).read())
 
 json.dump({"id": "mauricew/hnet-english-rung", "title": "hnet english rung",
            "code_file": "main.py", "language": "python", "kernel_type": "script",

@@ -195,6 +195,31 @@ def self_check(model, train, seq_len, batch):
         f"({ev['bpb']:.3f} vs {train_bpb:.3f} bpb)")
 
 
+def guard_reason(step, bpb, prev_best):
+    """Why this evaluation should end the run, or None to carry on.
+
+    Pure and separate so it can be tested without training anything. Three ways a run comes
+    apart, in the order they should be checked:
+
+    - a non-finite loss. This is not the same check as `bpb > 8.5`: in Python `nan > 8.5` is
+      False, so a run that diverged to NaN would pass a naive threshold and train for hours
+      before anyone noticed.
+    - a loss above uniform. 8.0 bits is uniform over 256 symbols and an untrained model sits
+      at 7.94, so step 0 is exempt; after that, being worse than uniform means the metric or
+      the run is broken, not that training is slow.
+    - a loss 50% worse than the run's own best. Something came apart mid-run, and finishing it
+      only spends more quota to learn the same thing.
+    """
+    if step > 0 and not math.isfinite(bpb):
+        return f"held-out bpb {bpb} is not a finite number"
+    if step > 0 and bpb > 8.5:
+        return f"held-out bpb {bpb:.3f} is far above uniform (8.0)"
+    if prev_best is not None and math.isfinite(bpb) and bpb > 1.5 * prev_best:
+        return (f"held-out bpb {bpb:.3f} is 50% worse than this run's best "
+                f"({prev_best:.3f})")
+    return None
+
+
 class TrainStep(nn.Module):
     """The loss, computed inside forward so DataParallel can gather it.
 
@@ -259,12 +284,12 @@ def main():
     log(f"devices visible: {ndev}"
         + "".join(f", cuda:{i} {torch.cuda.get_device_name(i)}" for i in range(ndev)))
     step_model = TrainStep(model, cfg.alpha)
-    if CFG.get("data_parallel", True) and ndev > 1 and BATCH % ndev != 0:
+    if CFG.get("data_parallel", False) and ndev > 1 and BATCH % ndev != 0:
         raise SystemExit(f"batch {BATCH} is not divisible by {ndev} devices: DataParallel "
                          f"would split it unevenly and the averaged loss would weight the "
                          f"shards unequally. Use a batch that divides, or set "
                          f"data_parallel=false.")
-    if CFG.get("data_parallel", True) and ndev > 1:
+    if CFG.get("data_parallel", False) and ndev > 1:
         step_model = nn.DataParallel(step_model)
         log(f"training on {ndev} GPUs via DataParallel; evaluation and checkpoints use the "
             f"raw model so the state dict keeps its keys")
@@ -310,7 +335,7 @@ def main():
         best = ck.get("best")
         log(f"resumed from {resume_from} at step {start_step}")
     t0 = time.time()
-    wall_guard = float(CFG.get("wall_guard_s", 36000))
+    wall_guard = float(CFG.get("wall_guard_s", 25200))   # 7 h: expected 5.9 h + 18% headroom
     done = 0
     for step in range(start_step, max_steps):
         k = order[step % len(order)]
@@ -341,6 +366,11 @@ def main():
         scaler.update()
         done = step + 1
 
+        if not math.isfinite(float(ce.item())) or not math.isfinite(float(rl.item())):
+            save_state(model, opt, scaler, step, history, evals, best, flops, resume_from)
+            raise RuntimeError(
+                f"step {step}: training loss is not finite (ce {ce.item()}, ratio "
+                f"{rl.item()}). Stopping at once; the checkpoint is saved for inspection.")
         if step % CFG["log_every"] == 0 or step == max_steps - 1:
             el = time.time() - t0
             rec = {"step": step, "ce": float(ce.item()), "bpb": float(ce.item()) / math.log(2),
@@ -357,21 +387,26 @@ def main():
                           n_batches=int(CFG.get("eval_batches", 40)))
             evals.append({"step": step, **ev})
             log(f"  eval step {step}: held-out bpb {ev['bpb']:.4f} over {ev['bytes']} bytes")
-            # 8.0 bits is uniform over 256 symbols, and an untrained model sits right at it
-            # (7.94 in the first rung), so step 0 is exempt: the canary is for a run that has
-            # had a chance to learn and is still anti-predicting, which is a broken metric or
-            # a diverged run, not a slow start.
-            if step > 0 and ev["bpb"] > 8.5:
-                save_state(model, opt, scaler, step + 1, history, evals, best, flops,
-                           resume_from)
-                raise RuntimeError(
-                    f"held-out bpb {ev['bpb']:.3f} is far above uniform (8.0): stopping instead "
-                    f"of spending more quota on a run that cannot be right")
+            prev_best = best["bpb"] if best else None
             if best is None or ev["bpb"] < best["bpb"]:
                 best = {"step": step, **ev}
                 torch.save({"config": dict(cfg.__dict__), "seed": CFG["seeds"][0],
                             "state": model.state_dict(), "step": step, "eval": ev},
                            os.path.join(OUT, "ckpt-best.pt"))
+            # 8.0 bits is uniform over 256 symbols, and an untrained model sits right at it
+            # (7.94 in the first rung), so step 0 is exempt: the canary is for a run that has
+            # had a chance to learn and is still anti-predicting, which is a broken metric or
+            # a diverged run, not a slow start.
+            #
+            # The isfinite test is not redundant: `nan > 8.5` is False in Python, so a run
+            # that diverged to NaN would have sailed past this guard for hours and handed
+            # back a checkpoint of nothing. Inf is caught by the same test.
+            reason = guard_reason(step, ev["bpb"], prev_best)
+            if reason:
+                save_state(model, opt, scaler, step + 1, history, evals, best, flops,
+                           resume_from)
+                raise RuntimeError(reason + " -- stopping instead of spending more quota on a "
+                                           "run that cannot be right")
         if step % CFG.get("save_every", 500) == 0 and step > start_step:
             save_state(model, opt, scaler, step + 1, history, evals, best, flops,
                        resume_from)
