@@ -150,6 +150,33 @@ explicitly, and a recorded null is worth more than an unrecorded guess.
 | branch A1 (second seed) | ~3.1 | ~16.6 |
 | reserve: one corrective run and overrun | ~3.0 | ~19.6 |
 
+## Result of step 2 (2026-11-01, kernel mauricew/hnet-eng-3e16)
+
+Both seeds completed, no guard fired, 4.65 h each on its own T4 (two seeds for the quota price
+of one). Realised FLOPs came in at 1.00x nominal -- the router settled at 5.97/6.01 bytes per
+chunk against the 6.0 target, unlike run 1's 3.99.
+
+| run | realised FLOPs | held-out bpb | bytes/param |
+|---|---|---|---|
+| run 1 (1.5e16) | 1.92e16 | 1.4900 | 22.1 |
+| run 2 (3e16) | 3.01e16 | **1.4173** (1.4170, 1.4177; spread 0.0007) | 34.6 |
+
+**Verdict against the pre-registered bands: FLAT.** 4.88% lower, and the flat band starts at
+1.4155 -- the result misses "success" by 0.0018 bpb. Seed spread is 0.0007, so the 4.88% is far
+above noise; it is a real but small gain.
+
+**Measured scaling exponent b = 0.111**, against the 0.206 the BLT law reports from fits about
+300x larger. At b = 0.111 a 1.57x increase in compute predicts 7.4%; we observed 4.88%.
+
+**Why:** run 2 sits at 34.6 bytes/param. On the ~20 bytes/param rule this model is under-sized
+for the data it has seen -- parameter-poor, not data-poor. That rule is a transformer
+heuristic and this architecture spends 2.53 FLOPs per parameter per byte rather than 6, so the
+optimum is not exactly 20; solving at fixed C = 3e16 gives roughly 24M parameters. Treat that
+as a reasoned estimate, not a law.
+
+Consequence for the plan: this is Branch B, and the free evidence (train bpb tracking val, no
+overfitting, val still descending at the end) points to size rather than data as the lever.
+
 ## Deviation log
 
 *(newest first; each entry states what changed, why, and who approved it)*
