@@ -177,6 +177,42 @@ as a reasoned estimate, not a law.
 Consequence for the plan: this is Branch B, and the free evidence (train bpb tracking val, no
 overfitting, val still descending at the end) points to size rather than data as the lever.
 
+## Knowns vs guesses (the frontier, after step 2)
+
+**Measured.** Two bpb points on the canonical sample: 1.4900 at 1.92e16 realised FLOPs, and
+1.4173 at 3.01e16 (two seeds, spread 0.0007). Exponent along that line: 0.111, against 0.206
+reported at ~300x larger scale. Throughput: 1.8e12 FLOP/s per T4 = 2.8% of the 65 TFLOP/s
+peak; the scan is 87.5% of the step; the reference implementation feeds 2.1 MB per step
+against our 8 KB. The router hit its 6.0 target, so realised FLOPs equal nominal here. Train
+bpb tracked val -- no overfitting -- and val was still descending when the run ended. Quota:
+14.88 h left.
+
+**Guessed.**
+1. The ~20 bytes/param optimum transfers to this architecture. It is a transformer heuristic;
+   this model spends 2.53 FLOPs per parameter per byte rather than 6, because the main network
+   runs at chunk resolution. There is no evidence either way in our data.
+2. Therefore "24M is the right size" -- derived entirely from 1. Two data points cannot locate
+   an optimum.
+3. A larger batch would fill the GPU now. The evidence for batch not mattering was measured at
+   the *untrained* router (chunk 1.9 bytes), where memory, not the scan, was binding. At the
+   trained router (5.97) that measurement may not apply.
+
+**The risk this section exists to name:** spending ~4.5 h on a size point whose value rests
+on guesses 1 and 2, when guess 3 may make the same point cost ~1 h -- or when the write-up is
+the better use of the quota. The cheapest discriminating measurement is the batch/throughput
+probe (about 0.15 h); the size question is not answerable from two points at any price.
+
+## Decisions after step 2 (2026-11-01, owner)
+
+1. **Quota discipline:** start with the throughput probe, and do NOT plan to spend the
+   remaining 14.9 h -- the reset is 5 days away and the prior pattern of burning quota on
+   guesses is what the owner wants stopped.
+2. **Evidence standard for size:** literature first. The owner wants the byte-level scaling
+   question researched against primary sources before any further size experiment, so the
+   24M figure stops being a guess and becomes either supported or replaced.
+3. **Pipeline work is welcome:** efficiency improvements and adaptations are always in scope;
+   the goal is fewer mistakes, not fewer changes.
+
 ## Deviation log
 
 *(newest first; each entry states what changed, why, and who approved it)*
