@@ -213,6 +213,33 @@ probe (about 0.15 h); the size question is not answerable from two points at any
 3. **Pipeline work is welcome:** efficiency improvements and adaptations are always in scope;
    the goal is fewer mistakes, not fewer changes.
 
+## Probe overrun (2026-11-01, recorded as it happens)
+
+The warm-started batch probe was budgeted at ~0.15 h and burned ~2.1 h before being stopped:
+no live logs, no completion, 14x over. Probable cause is torch.compile re-tracing for every
+batch shape; the re-run drops inductor compile, keeps the fused scan, and carries a hard
+720 s in-probe budget so it cannot run away again. Cost of the lesson: ~2.2 h of quota.
+
+## Literature on the size question (docs/RESEARCH_SCALING.md, 12 sources)
+
+For a ~3e16 FLOPs byte-level run the sources bracket the compute-optimal size at **10M-25M
+parameters**: ~15.8M by Chinchilla arithmetic in token units (an extrapolation -- their table
+stops at 1.84e19 FLOPs, ~600x above this budget); ~24.3M if the 20 bytes/param rule transfers
+to bytes unchanged; ~10.3M using BLT's ~111 bytes/param anchor with this project's 2.53
+FLOPs/param/byte. The spread is dominated by the assumed bytes/param ratio, and **no published
+work fits a scaling law on byte-level models**, so the literature alone cannot choose between
+20 and 111 bytes/param -- a 2.3x range in optimal size.
+
+**Our own two points now bear on that choice.** At 34.6 bytes/param, a further 57% more data
+bought only 4.9% lower bpb. If the optimum were near 111 bytes/param, that first leg of the
+journey should have paid much more. So the measurement leans toward the low end of the
+literature range: this 18.56M model is roughly right-sized or modestly under, and the flat
+result reflects the architecture's own slow exponent (0.111) more than a size error.
+
+Consequence: a 24M run would sit at ~20 bytes/param -- at the heuristic optimum -- but the
+expected gain over 1.4173 is a few percent, not a step change. The price of that run depends
+entirely on the throughput probe, which is why the probe comes first.
+
 ## Deviation log
 
 *(newest first; each entry states what changed, why, and who approved it)*
