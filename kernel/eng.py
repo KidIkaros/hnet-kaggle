@@ -130,8 +130,13 @@ def evaluate(model, docs, seq_len, batch, n_batches=40, seed=0):
             x = torch.from_numpy(out.astype(np.int64)).to(DEV)
             m = torch.from_numpy(mask).to(DEV)
             logits, aux = model(x)
-            ls = F.cross_entropy(logits.reshape(-1, 256), x.reshape(-1), reduction="none")
-            mm = m.reshape(-1)
+            # logits[t] predicts byte t+1, so the target is x[:, 1:] and the mask shifts with
+            # it. Comparing logits[t] against x[t] instead measures the model's guess for a
+            # byte it is being shown -- which scored 13.2 bpb, worse than uniform, on a run
+            # whose training bpb had reached 1.44.
+            ls = F.cross_entropy(logits[:, :-1].reshape(-1, 256),
+                                 x[:, 1:].reshape(-1), reduction="none")
+            mm = m[:, 1:].reshape(-1)
             tot_nll += float((ls * mm).sum().item())
             tot_bytes += float(mm.sum().item())
     model.train()

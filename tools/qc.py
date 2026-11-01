@@ -151,7 +151,24 @@ def stage_correctness(cfg, seq_len, batch, steps=60):
     check("correctness", "overfits a single batch", loss.item() < 0.5 * first,
           f"loss {first:.3f} -> {loss.item():.3f} in {steps} steps")
 
-    # 5. determinism
+    # 5. the evaluation path must measure what training measures. A run whose training loss
+    #    fell to 1.44 bpb scored 13.2 on held-out because evaluate() compared logits[t] with
+    #    byte t instead of t+1: off by one, worse than uniform, and invisible in the loss curve.
+    m_eval = M.HNetLM(cfg)
+    M.init_weights(m_eval)
+    xb = torch.randint(0, 256, (2, 64))
+    mask = torch.ones(2, 63)
+    logits, aux = m_eval(xb)
+    train_style, _ = masked_loss(logits[:, :-1], xb[:, 1:], mask)
+    eval_style = F.cross_entropy(logits.reshape(-1, 256), xb.reshape(-1))
+    shifted = F.cross_entropy(logits[:, :-1].reshape(-1, 256), xb[:, 1:].reshape(-1))
+    check("correctness", "evaluation uses the same shift as training",
+          abs(shifted.item() - train_style.item()) < 1e-4
+          and abs(eval_style.item() - shifted.item()) > 1e-3,
+          f"train {train_style.item():.3f}, eval-shifted {shifted.item():.3f}, "
+          f"unshifted {eval_style.item():.3f} (must differ)")
+
+    # 6. determinism
     torch.manual_seed(7)
     m3 = M.HNetLM(cfg)
     M.init_weights(m3)

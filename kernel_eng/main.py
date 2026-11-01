@@ -1,6 +1,6 @@
 import json
 
-open("/tmp/eng.json", "w").write("{\"d_model\": 384, \"n_enc\": 4, \"n_main\": 6, \"n_dec\": 4, \"d_ff\": 1536, \"d_state\": 16, \"d_conv\": 4, \"n_heads\": 6, \"scan_chunk\": 64, \"target_ratio\": 6.0, \"alpha\": 0.3, \"seq_len\": 2048, \"batch\": 4, \"lr\": 0.001, \"warmup\": 2000, \"wd\": 0.1, \"clip\": 1.0, \"seeds\": [0], \"lr_mult_outer\": 2.0, \"lr_mult_main\": 1.5, \"compile_blocks\": false, \"grad_checkpoint\": true, \"resume\": false, \"save_every\": 1000000000, \"max_steps\": 200000, \"eval_every\": 2, \"log_every\": 1, \"wall_guard_s\": 400, \"flops_budget\": 1200000000000.0, \"note\": \"smoke test of the built rung kernel: same geometry and scan, 3 steps\", \"scan_impl\": \"triton\"}")
+open("/tmp/eng.json", "w").write("{\"d_model\": 384, \"n_enc\": 4, \"n_main\": 6, \"n_dec\": 4, \"d_ff\": 1536, \"d_state\": 16, \"d_conv\": 4, \"n_heads\": 6, \"scan_chunk\": 64, \"target_ratio\": 6.0, \"alpha\": 0.3, \"seq_len\": 2048, \"batch\": 4, \"lr\": 0.001, \"warmup\": 2000, \"wd\": 0.1, \"clip\": 1.0, \"seeds\": [0], \"lr_mult_outer\": 2.0, \"lr_mult_main\": 1.5, \"compile_blocks\": false, \"grad_checkpoint\": true, \"resume\": true, \"save_every\": 500, \"max_steps\": 200000, \"eval_every\": 2000, \"log_every\": 100, \"wall_guard_s\": 32400, \"flops_budget\": 1.5e+16, \"note\": \"comparable rung: d384/4/6/4, 18.6M params, seq 2048, batch 4, official LR multipliers, alpha 0.3 (deviation from the paper's 0.03), fused Triton scan, 1.5e16 training FLOPs\", \"scan_impl\": \"triton\"}")
 
 import torch
 import triton
