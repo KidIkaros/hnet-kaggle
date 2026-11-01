@@ -170,7 +170,7 @@ def masked_loss(logits, targets, mask):
 
 
 # -------------------------------------------------------------------- performance
-def stage_performance(cfg, seq_len, batch, budget, quota_hours, n=8):
+def stage_performance(cfg, seq_len, batch, budget, quota_hours, n=8, cfg_dict=None):
     print("\n-- performance")
     if not torch.cuda.is_available():
         skip("performance", "measured step time and memory", "no CUDA device in this interpreter")
@@ -178,8 +178,13 @@ def stage_performance(cfg, seq_len, batch, budget, quota_hours, n=8):
     dev = "cuda"
     m = M.HNetLM(cfg).to(dev)
     M.init_weights(m)
-    # the scan implementation is a module-level global in model.py, not a model attribute
-    M.SCAN_IMPL = "reference"
+    # measure the configuration we would actually run: compiled blocks if the config says so.
+    # The scan implementation is a module-level global in model.py, not a model attribute.
+    if (cfg_dict or {}).get("compile_blocks", False):
+        M.SCAN_IMPL = "compiled"
+        M.compile_ssm_blocks(m)
+    else:
+        M.SCAN_IMPL = "reference"
     torch.manual_seed(0)
     x = torch.randint(0, 256, (batch, seq_len), device=dev)
     opt = torch.optim.AdamW(m.parameters(), lr=1e-3)
@@ -227,12 +232,16 @@ def stage_spec(cfg_dict):
     check("spec", "main learning-rate multiplier is the official 1.5 (not composed)",
           abs(lm - LIMITS["spec_lr_mult_main"]) < 1e-9,
           f"{lm} vs {LIMITS['spec_lr_mult_main']} (official overwrites; a product would be 3.0)")
-    groups = M.param_groups(M.HNetLM(M.HNetConfig(d_model=64, n_enc=1, n_main=1, n_dec=1)),
-                            lo, lm)
+    # Asserted against the spec's literals, not against the config's own values: comparing
+    # main_mult to lm would pass whenever the code and the config agree, which is exactly the
+    # case that was wrong. The expected numbers come from the official implementation.
+    probe = M.HNetLM(M.HNetConfig(d_model=64, n_enc=1, n_main=1, n_dec=1))
+    groups = M.param_groups(probe, 2.0, 1.5)
     main_mult = next((g["lr_mult"] for g in groups if g["name"] == "main"), None)
-    check("spec", "param_groups does not compose the multipliers",
-          main_mult is None or abs(main_mult - lm) < 1e-9,
-          f"main group effective {main_mult}")
+    outer_mult = next((g["lr_mult"] for g in groups if g["name"] == "outer"), None)
+    check("spec", "param_groups(2.0, 1.5) yields main 1.5 and outer 2.0 (no composition)",
+          outer_mult == 2.0 and main_mult == 1.5,
+          f"outer {outer_mult}, main {main_mult}; a composed reading would give 3.0")
     alpha = float(cfg_dict.get("alpha", 0.0))
     note = ("deviation, must be reported" if abs(alpha - LIMITS["spec_alpha"]) > 1e-9
             else "matches the paper")
@@ -251,7 +260,7 @@ def main():
     ap.add_argument("--no-perf", action="store_true", help="skip the GPU stage")
     args = ap.parse_args()
 
-    cfg_dict = json.load(open(args.config))
+    cfg_dict = json.load(open(args.config)) or {}
     fields = {k: v for k, v in cfg_dict.items() if k in M.HNetConfig.__dataclass_fields__}
     cfg = M.HNetConfig(**fields)
     seq_len, batch = int(cfg_dict["seq_len"]), int(cfg_dict["batch"])
@@ -266,7 +275,8 @@ def main():
     static = stage_static(cfg_dict, cfg, seq_len, batch, budget, args.quota_hours)
     stage_correctness(cfg, seq_len, batch)
     perf = None if args.no_perf else stage_performance(cfg, seq_len, batch, budget,
-                                                       args.quota_hours)
+                                                       args.quota_hours,
+                                                       cfg_dict=cfg_dict)
     stage_spec(cfg_dict)
 
     failed = [r for r in RESULTS if r["pass"] is False]
