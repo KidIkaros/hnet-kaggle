@@ -1,6 +1,6 @@
 import json
 
-open("/tmp/eng.json", "w").write("{\"d_model\": 384, \"n_enc\": 4, \"n_main\": 6, \"n_dec\": 4, \"d_ff\": 1536, \"d_state\": 16, \"d_conv\": 4, \"n_heads\": 6, \"scan_chunk\": 64, \"target_ratio\": 6.0, \"alpha\": 0.3, \"seq_len\": 2048, \"batch\": 4, \"lr\": 0.001, \"warmup\": 2000, \"wd\": 0.1, \"clip\": 1.0, \"seeds\": [0], \"lr_mult_outer\": 2.0, \"lr_mult_main\": 1.5, \"compile_blocks\": true, \"grad_checkpoint\": true, \"resume\": true, \"save_every\": 500, \"max_steps\": 200000, \"eval_every\": 2000, \"log_every\": 100, \"wall_guard_s\": 32400, \"flops_budget\": 1.5e+16, \"amp\": \"fp16\", \"note\": \"comparable rung: d384/4/6/4, 18.6M params, seq 2048, batch 4, official LR multipliers, alpha 0.3, checkpointing, fp16, 1.5e16 training FLOPs\"}")
+open("/tmp/eng.json", "w").write("{\"d_model\": 384, \"n_enc\": 4, \"n_main\": 6, \"n_dec\": 4, \"d_ff\": 1536, \"d_state\": 16, \"d_conv\": 4, \"n_heads\": 6, \"scan_chunk\": 64, \"target_ratio\": 6.0, \"alpha\": 0.3, \"seq_len\": 2048, \"batch\": 4, \"lr\": 0.001, \"warmup\": 2000, \"wd\": 0.1, \"clip\": 1.0, \"seeds\": [0], \"lr_mult_outer\": 2.0, \"lr_mult_main\": 1.5, \"compile_blocks\": true, \"grad_checkpoint\": true, \"resume\": false, \"save_every\": 1000000000, \"max_steps\": 200000, \"eval_every\": 100, \"log_every\": 10, \"wall_guard_s\": 2400, \"flops_budget\": 77000000000000.0, \"amp\": \"fp16\", \"note\": \"throughput calibration at the rung geometry: 200 steps, logs ms/step and the realised chunk length, to size the real budget\"}")
 
 from dataclasses import dataclass
 import math
@@ -292,11 +292,15 @@ def param_groups(model, mult_outer=1.0, mult_main=1.0):
     if outer:
         groups.append({"params": outer, "lr_mult": mult_outer, "name": "outer"})
     if main:
-        # The official code applies the OUTER stage's multiplier to every parameter of that
-        # stage -- including the main network, which is a submodule of it -- and then applies
-        # the main network's own multiplier on top. Its own comment says so. So the main
-        # network's effective multiplier is the product, not the bare second number.
-        groups.append({"params": main, "lr_mult": mult_outer * mult_main, "name": "main"})
+        # NOT a product. The official implementation walks the whole stage, then recurses into
+        # the main network and applies its multiplier again -- but `apply_optimization_params`
+        # is `param._optim.update(kwargs)`, so the second call OVERWRITES the first. The main
+        # network therefore ends at mult_main (1.5), not mult_outer * mult_main (3.0).
+        # Source: goombalab/hnet, hnet/models/hnet.py::_apply_lr_multiplier and
+        # hnet/modules/utils.py::apply_optimization_params. Our earlier product reading was
+        # wrong by a factor of two on the main network; the paper's closed form agrees, since
+        # its innermost stage runs BELOW the base learning rate.
+        groups.append({"params": main, "lr_mult": mult_main, "name": "main"})
     return groups
 
 

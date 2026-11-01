@@ -23,13 +23,13 @@
   "lr_mult_main": 1.5,
   "compile_blocks": true,
   "grad_checkpoint": true,
-  "resume": true,
-  "save_every": 500,
+  "resume": false,
+  "save_every": 1000000000,
   "max_steps": 200000,
-  "eval_every": 2000,
-  "log_every": 100,
-  "wall_guard_s": 32400,
-  "flops_budget": 1.5e+16,
+  "eval_every": 100,
+  "log_every": 10,
+  "wall_guard_s": 2400,
+  "flops_budget": 77000000000000.0,
   "amp": "fp16",
-  "note": "comparable rung: d384/4/6/4, 18.6M params, seq 2048, batch 4, official LR multipliers, alpha 0.3, checkpointing, fp16, 1.5e16 training FLOPs"
+  "note": "throughput calibration at the rung geometry: 200 steps, logs ms/step and the realised chunk length, to size the real budget"
 }

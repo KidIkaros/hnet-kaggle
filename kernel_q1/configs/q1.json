@@ -8,7 +8,7 @@
   "d_conv": 4,
   "scan_chunk": 64,
   "target_ratio": 6.0,
-  "alpha": 0.03,
+  "alpha": 0.3,
   "max_steps": 5000,
   "seq_len": 256,
   "batch": 16,
@@ -38,5 +38,5 @@
   "sweep_ratios": null,
   "lr_mult_outer": 2.0,
   "lr_mult_main": 1.5,
-  "note": "official LR multipliers: outer 2.0 applied to all params, main 1.5 composed on top (effective 3.0)"
+  "note": "official LR semantics (outer 2.0, main 1.5 OVERWRITTEN, not composed) at alpha 0.3; the earlier winning arm used 3.0 on the main net, which is 2x the official inner LR"
 }

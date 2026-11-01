@@ -136,7 +136,7 @@ def run_seed(seed, deadline, ratio=None):
         global SCAN_IMPL
         SCAN_IMPL = "compiled"
         compile_ssm_blocks(model)
-        log(f"scan impl compiled, {len(model.modules())} modules walked")
+        log(f"scan impl compiled over {sum(1 for _ in model.modules())} modules")
     mo = float(CFG.get("lr_mult_outer", 1.0))
     mm = float(CFG.get("lr_mult_main", 1.0))
     groups = param_groups(model, mo, mm)

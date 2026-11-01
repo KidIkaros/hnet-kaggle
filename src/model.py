@@ -308,11 +308,15 @@ def param_groups(model, mult_outer=1.0, mult_main=1.0):
     if outer:
         groups.append({"params": outer, "lr_mult": mult_outer, "name": "outer"})
     if main:
-        # The official code applies the OUTER stage's multiplier to every parameter of that
-        # stage -- including the main network, which is a submodule of it -- and then applies
-        # the main network's own multiplier on top. Its own comment says so. So the main
-        # network's effective multiplier is the product, not the bare second number.
-        groups.append({"params": main, "lr_mult": mult_outer * mult_main, "name": "main"})
+        # NOT a product. The official implementation walks the whole stage, then recurses into
+        # the main network and applies its multiplier again -- but `apply_optimization_params`
+        # is `param._optim.update(kwargs)`, so the second call OVERWRITES the first. The main
+        # network therefore ends at mult_main (1.5), not mult_outer * mult_main (3.0).
+        # Source: goombalab/hnet, hnet/models/hnet.py::_apply_lr_multiplier and
+        # hnet/modules/utils.py::apply_optimization_params. Our earlier product reading was
+        # wrong by a factor of two on the main network; the paper's closed form agrees, since
+        # its innermost stage runs BELOW the base learning rate.
+        groups.append({"params": main, "lr_mult": mult_main, "name": "main"})
     return groups
 
 
