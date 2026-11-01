@@ -1,0 +1,136 @@
+{
+  "config": "/home/ikaaros/.hermes/cache/scratch/tmphfqzh785/cfg.json",
+  "config_values": {
+    "d_model": 384,
+    "n_enc": 4,
+    "n_main": 6,
+    "n_dec": 4,
+    "d_ff": 1536,
+    "d_state": 16,
+    "d_conv": 4,
+    "n_heads": 6,
+    "scan_chunk": 64,
+    "target_ratio": 6.0,
+    "alpha": 0.3,
+    "seq_len": 2048,
+    "batch": 4,
+    "lr": 0.001,
+    "warmup": 2000,
+    "wd": 0.1,
+    "clip": 1.0,
+    "seeds": [
+      0
+    ],
+    "lr_mult_outer": 2.0,
+    "lr_mult_main": 1.5,
+    "compile_blocks": false,
+    "grad_checkpoint": true,
+    "resume": true,
+    "save_every": 500,
+    "max_steps": 200000,
+    "eval_every": 2000,
+    "log_every": 100,
+    "wall_guard_s": 32400,
+    "flops_budget": 100000000000000.0,
+    "note": "comparable rung: d384/4/6/4, 18.6M params, seq 2048, batch 4, official LR multipliers, alpha 0.3 (deviation from the paper's 0.03), fused Triton scan, 1.5e16 training FLOPs",
+    "scan_impl": "triton"
+  },
+  "static": {
+    "params": 18560256,
+    "flops_per_byte": 46891008.0,
+    "steps": 260,
+    "bytes_seen": 2129920,
+    "bytes_per_param": 0.1147570378339609,
+    "epochs": 0.0009051897555618601,
+    "flops_per_step": 384131137536.0
+  },
+  "performance": null,
+  "results": [
+    {
+      "stage": "static",
+      "check": "parameters in the intended family (5M-60M)",
+      "pass": true,
+      "detail": "18.56 M"
+    },
+    {
+      "stage": "static",
+      "check": "data seen >= 10 bytes/param",
+      "pass": false,
+      "detail": "0.1 bytes/param, 0.001 epochs of the corpus"
+    },
+    {
+      "stage": "static",
+      "check": "budget buys at least 0.05 epochs",
+      "pass": false,
+      "detail": "0.001 epochs"
+    },
+    {
+      "stage": "static",
+      "check": "sequence length fits the document length distribution",
+      "pass": true,
+      "detail": "seq_len 2048 vs median document ~2936 B"
+    },
+    {
+      "stage": "correctness",
+      "check": "chunked scan matches the naive recurrence",
+      "pass": true,
+      "detail": "max abs diff 9.54e-07"
+    },
+    {
+      "stage": "correctness",
+      "check": "masked loss equals cross-entropy over the real bytes only",
+      "pass": true,
+      "detail": "5.396595 vs 5.396595, 3 bytes"
+    },
+    {
+      "stage": "correctness",
+      "check": "no parameter is left without a gradient",
+      "pass": true,
+      "detail": "0 dead: []"
+    },
+    {
+      "stage": "correctness",
+      "check": "overfits a single batch",
+      "pass": true,
+      "detail": "loss 5.593 -> 0.001 in 60 steps"
+    },
+    {
+      "stage": "correctness",
+      "check": "evaluation uses the same shift as training",
+      "pass": true,
+      "detail": "train 5.621, eval-shifted 5.621, unshifted 5.490 (must differ)"
+    },
+    {
+      "stage": "correctness",
+      "check": "same seed gives the same forward",
+      "pass": true,
+      "detail": ""
+    },
+    {
+      "stage": "spec",
+      "check": "outer learning-rate multiplier matches the reference",
+      "pass": true,
+      "detail": "2.0 vs 2.0"
+    },
+    {
+      "stage": "spec",
+      "check": "main learning-rate multiplier is the official 1.5 (not composed)",
+      "pass": true,
+      "detail": "1.5 vs 1.5 (official overwrites; a product would be 3.0)"
+    },
+    {
+      "stage": "spec",
+      "check": "param_groups(2.0, 1.5) yields main 1.5 and outer 2.0 (no composition)",
+      "pass": true,
+      "detail": "outer 2.0, main 1.5; a composed reading would give 3.0"
+    },
+    {
+      "stage": "spec",
+      "check": "alpha is the paper's 0.03 or recorded as a deviation",
+      "pass": true,
+      "detail": "alpha 0.3 vs paper 0.03 (deviation, must be reported)"
+    }
+  ],
+  "pass": false,
+  "skipped": []
+}
