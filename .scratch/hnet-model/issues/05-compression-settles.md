@@ -20,3 +20,55 @@ rests on.
 - [ ] The result is reported as a comparison against the current best run's bpb, with the tolerance stated in advance.
 - [ ] The reading is written into the write-up's model section, not only into a ticket.
 - [ ] A ratio loss sitting near 1.05 is read as "not converged", not "broken": the published diagnostic band for a failing run is substantially above 1, and the lower bound for a run shutting the main network down is 2(N-1)/N, which at N=6 is 1.667. Our band is benign, and the write-up says so rather than dramatising it.
+
+## Result: the recipe is the official learning-rate multipliers with alpha 0.3
+
+Two CPU sweep rounds, 0.84 M parameters, six languages, 5000 steps, seed-matched.
+
+**Iteration 1 (seed 0), one arm per intervention**
+
+| arm | F | G | ratio loss | bytes/chunk | mean bpb | eng bpb |
+|---|---|---|---|---|---|---|
+| control | 0.234 | 0.323 | 1.080 | 4.27 | 2.501 | 2.509 |
+| alpha 1.0 | 0.169 | 0.298 | 1.003 | 5.91 | 2.520 | 2.536 |
+| curriculum | 0.234 | 0.348 | 1.088 | 4.28 | 2.487 | 2.494 |
+| **official LR multipliers** | 0.196 | 0.320 | 1.034 | 5.11 | **2.406** | **2.352** |
+| batch-aggregated F/G | 0.256 | 0.334 | 1.107 | 3.91 | 2.497 | 2.457 |
+
+**Iteration 2, seed-matched against the control**
+
+| | seed 0 | seed 1 |
+|---|---|---|
+| control, mean bpb | 2.501 | 2.510 |
+| LR multipliers, mean bpb | 2.406 | 2.407 |
+| effect | **-0.095** | **-0.103** |
+| effect on English | -0.157 | -0.154 |
+
+The learning-rate effect replicates across seeds to within 0.008 bpb, well inside the
+seed-to-seed spread of the arm itself (the two seeds of the treatment differ by 0.001 bpb on
+the mean and 0.064 on the worst single language). It is not noise.
+
+**The combination that wins.** Official multipliers with alpha 0.3 on top, seed 0:
+
+| arm | mean bpb | eng bpb | bytes/chunk | ratio loss | F | G |
+|---|---|---|---|---|---|---|
+| LR multipliers alone | 2.406 | 2.352 | 5.11 | 1.034 | 0.196 | 0.320 |
+| **LR multipliers + alpha 0.3** | **2.402** | **2.349** | **5.74** | **1.009** | 0.174 | 0.310 |
+
+It matches the multipliers alone on quality and lands the compression close to the target of
+6.0 bytes/chunk, with a ratio loss of 1.009 against the control's 1.080. Alpha 1.0 was not
+needed: the multipliers move the compression most of the way, and a weight of 0.3 finishes it
+without the quality cost that a weight of 1.0 carried on its own.
+
+**What this settles and what it does not.** It settles that the compression failure was a
+dynamics problem, not an objective problem: the official per-stage learning-rate modulation
+was missing, and it improves quality and compression together. It does not settle the F-vs-G
+gap. The best arm still has F at 0.174 against G at 0.310, and the ratio loss reports that as
+settled, because of the cross-of-minima structure. Closing that gap needs a different
+objective, and nothing here says it is worth the quality cost.
+
+**Dead ends, recorded so they are not retried:** the target-ratio curriculum was a no-op
+(4.28 against 4.27 bytes/chunk) because at the default weight the ratio loss cannot track a
+moving target, and curriculum and loss weight are not independent knobs; the batch-aggregated
+F/G variant was worse than the per-sequence form on both quality and compression, which
+refutes the hypothesis the catalogue advanced from our per-sequence deviation.

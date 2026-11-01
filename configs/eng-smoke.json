@@ -1,0 +1,30 @@
+{
+  "d_model": 64,
+  "n_enc": 1,
+  "n_main": 1,
+  "n_dec": 1,
+  "d_ff": 256,
+  "d_state": 8,
+  "d_conv": 4,
+  "scan_chunk": 64,
+  "target_ratio": 6.0,
+  "alpha": 0.03,
+  "max_steps": 6,
+  "seq_len": 512,
+  "batch": 4,
+  "lr": 0.001,
+  "warmup": 2,
+  "wd": 0.1,
+  "clip": 1.0,
+  "seeds": [
+    0
+  ],
+  "eval_every": 3,
+  "log_every": 1,
+  "wall_guard_s": 600,
+  "flops_budget": 1000000000.0,
+  "lr_mult_outer": 2.0,
+  "lr_mult_main": 1.5,
+  "compile_blocks": false,
+  "note": "cpu smoke test of the English data path"
+}
