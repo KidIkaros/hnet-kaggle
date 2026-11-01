@@ -48,7 +48,10 @@ LIMITS = {
     "min_mfu": 0.02,             # 2% of 65 TFLOPS = 1.3 TFLOPS; below this we are launch-bound
     "min_bytes_per_param": 10.0,  # below this the model is far under-trained for its size
     "max_quota_fraction": 0.80,  # a run may not plan to use more than 80% of what is left
-    "t4_peak_flops": 65e12,
+    # Peak FP16 / FP32 TFLOPS per device. The MFU denominator must match the precision the
+    # run actually uses: dividing an fp32 measurement by an fp16 peak understates it by ~8x,
+    # which is what made the gate report 0.25% when the loop was doing fp32 math.
+    "peaks": {"T4": (65.0, 8.1), "RTX 2070": (53.0, 8.1), "default": (60.0, 8.0)},
     # the published implementation's values, from goombalab/hnet
     "spec_lr_mult_outer": 2.0,
     "spec_lr_mult_main": 1.5,
@@ -187,7 +190,12 @@ def stage_performance(cfg, seq_len, batch, budget, quota_hours, n=3, cfg_dict=No
     M.init_weights(m)
     # measure the configuration we would actually run: compiled blocks if the config says so.
     # The scan implementation is a module-level global in model.py, not a model attribute.
-    if (cfg_dict or {}).get("compile_blocks", False):
+    impl = (cfg_dict or {}).get("scan_impl")
+    if impl:
+        M.SCAN_IMPL = impl
+        if impl == "compiled":
+            M.compile_ssm_blocks(m)
+    elif (cfg_dict or {}).get("compile_blocks", False):
         M.SCAN_IMPL = "compiled"
         M.compile_ssm_blocks(m)
     else:
@@ -198,16 +206,25 @@ def stage_performance(cfg, seq_len, batch, budget, quota_hours, n=3, cfg_dict=No
     torch.cuda.empty_cache()
     torch.cuda.reset_peak_memory_stats()
     t_start = time.perf_counter()
+    amp_on = (cfg_dict or {}).get("amp") == "fp16"
+    scaler = torch.amp.GradScaler("cuda", enabled=amp_on)
+
+    def step():
+        with torch.amp.autocast("cuda", dtype=torch.float16, enabled=amp_on):
+            logits, aux = m(x)
+            loss = F.cross_entropy(logits[:, :-1].reshape(-1, 256), x[:, 1:].reshape(-1))
+        opt.zero_grad(set_to_none=True)
+        scaler.scale(loss).backward()
+        scaler.step(opt)
+        scaler.update()
+        return aux
+
     for _ in range(2):
-        logits, aux = m(x)
-        F.cross_entropy(logits[:, :-1].reshape(-1, 256), x[:, 1:].reshape(-1)).backward()
-        opt.step()
+        step()
     torch.cuda.synchronize()
     t0 = time.perf_counter()
     for _ in range(n):
-        logits, aux = m(x)
-        F.cross_entropy(logits[:, :-1].reshape(-1, 256), x[:, 1:].reshape(-1)).backward()
-        opt.step()
+        aux = step()
     torch.cuda.synchronize()
     ms = (time.perf_counter() - t0) / n * 1000
     if time.perf_counter() - t_start > max_seconds:
@@ -216,15 +233,23 @@ def stage_performance(cfg, seq_len, batch, budget, quota_hours, n=3, cfg_dict=No
     peak_gb = torch.cuda.max_memory_allocated() / 1e9
     achieved = training_flops_per_byte(cfg, seq_len, float(aux["bytes_per_chunk"])) \
         * batch * seq_len / (ms / 1000)
-    mfu = achieved / LIMITS["t4_peak_flops"]
+    # the denominator follows the device and the precision the config asks for
+    dev_name = torch.cuda.get_device_name(0)
+    fp16, fp32 = next((v for k, v in LIMITS["peaks"].items() if k in dev_name),
+                      LIMITS["peaks"]["default"])
+    using_fp16 = (cfg_dict or {}).get("amp") == "fp16"
+    peak = (fp16 if using_fp16 else fp32) * 1e12
+    precision = "fp16" if using_fp16 else "fp32"
+    mfu = achieved / peak
     steps, _ = steps_for_budget(cfg, seq_len, batch, cfg.target_ratio, budget)
     hours = steps * ms / 1000 / 3600
     print(f"     {ms:.0f} ms/step, peak {peak_gb:.2f} GB, {achieved/1e9:.0f} GFLOP/s "
-          f"({mfu*100:.2f}% MFU), {steps} steps = {hours:.1f} h")
+          f"({mfu*100:.2f}% of {dev_name} {precision} peak), {steps} steps = {hours:.1f} h")
     check("performance", f"peak memory <= {LIMITS['peak_memory_gb']} GB",
           peak_gb <= LIMITS["peak_memory_gb"], f"{peak_gb:.2f} GB")
-    check("performance", f"MFU >= {LIMITS['min_mfu']*100:.1f}% (not launch-bound)",
-          mfu >= LIMITS["min_mfu"], f"{mfu*100:.2f}% of T4 peak")
+    check("performance", f"MFU >= {LIMITS['min_mfu']*100:.1f}% of the device's own "
+                         f"{precision} peak (not launch-bound)",
+          mfu >= LIMITS["min_mfu"], f"{mfu*100:.2f}% of {peak/1e12:.1f} TFLOPS")
     check("performance", f"run fits in {LIMITS['max_quota_fraction']*100:.0f}% of remaining quota",
           hours <= LIMITS["max_quota_fraction"] * quota_hours,
           f"{hours:.1f} h needed, {quota_hours:.1f} h left")

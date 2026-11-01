@@ -97,6 +97,37 @@ def main():
     rel2 = (y_ref2 - y_new2).abs().max().item() / y_ref2.abs().max().item()
     case("forward matches at L=2048", rel2 < 2e-4, f"rel {rel2:.2e}")
 
+    # ---- the whole model must agree, not just the kernel in isolation
+    def model_out(impl):
+        cfg = M.HNetConfig(d_model=64, n_enc=1, n_main=1, n_dec=1, d_ff=128, d_state=16)
+        torch.manual_seed(0)
+        m = M.HNetLM(cfg).cuda()
+        M.init_weights(m)
+        M.SCAN_IMPL = impl
+        xb = torch.randint(0, 256, (2, 128), device="cuda")
+        logits, aux = m(xb)
+        loss = torch.nn.functional.cross_entropy(logits[:, :-1].reshape(-1, 256),
+                                                 xb[:, 1:].reshape(-1))
+        loss.backward()
+        grads = {n: p.grad.detach().clone() for n, p in m.named_parameters()
+                 if p.grad is not None}
+        return logits.detach(), loss.item(), grads
+
+    l_ref, loss_ref, g_ref = model_out("reference")
+    l_tri, loss_tri, g_tri = model_out("triton")
+    rel = (l_ref - l_tri).abs().max().item() / l_ref.abs().max().item()
+    case("whole model: logits match", rel < 1e-4, f"rel {rel:.2e}")
+    case("whole model: loss matches", abs(loss_ref - loss_tri) < 1e-4,
+         f"{loss_ref:.6f} vs {loss_tri:.6f}")
+    worst = 0.0
+    for k in g_ref:
+        if k not in g_tri:
+            continue
+        d = (g_ref[k] - g_tri[k]).abs().max().item() / (g_ref[k].abs().max().item() + 1e-9)
+        worst = max(worst, d)
+    case("whole model: every parameter's gradient matches", worst < 5e-3,
+         f"worst relative difference {worst:.2e}")
+
     print(f"\n{len(FAILED)} failing test(s)")
     for f in FAILED:
         print("  -", f)

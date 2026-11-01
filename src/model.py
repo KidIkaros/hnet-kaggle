@@ -23,6 +23,11 @@ import math
 
 import torch
 import torch.nn as nn
+
+try:
+    import scan_triton
+except Exception:                       # triton is optional: CPU-only paths must still work
+    scan_triton = None
 import torch.nn.functional as F
 
 
@@ -108,8 +113,16 @@ def sequential_scan(a, b):
     return torch.stack(outs, dim=1)
 
 
-SCAN_IMPL = "fast"          # "reference" | "fast" | "compiled"
+SCAN_IMPL = "fast"          # "reference" | "fast" | "compiled" | "triton"
 _COMPILED_SCAN = None
+
+
+def _triton_ok(x, A):
+    """The fused kernel needs a CUDA device, E divisible by its block, and a power-of-two N."""
+    if scan_triton is None or not x.is_cuda or x.shape[-1] % 32:
+        return False
+    n = A.shape[-1]
+    return n & (n - 1) == 0
 
 
 def scan(a, b, chunk):
@@ -206,11 +219,16 @@ class SSMBlock(nn.Module):
         with torch.autocast(device_type=x.device.type, enabled=False):
             A = -torch.exp(self.A_log.float())                     # (E,N)
             delta = delta.float()
-            a = torch.exp(delta.unsqueeze(-1) * A)                 # (B,L,E,N)
-            b = delta.unsqueeze(-1) * Bc.unsqueeze(2).float() * x.unsqueeze(-1).float()
-
-            h = scan(a, b, self.chunk)
-        y = (h * Cc.unsqueeze(2).float()).sum(-1) + self.D.float() * x.float()
+            if SCAN_IMPL == "triton" and _triton_ok(x, A):
+                # One fused kernel: the state stays in registers, so the (B,L,E,N)
+                # intermediates that dominated the step are never materialised.
+                y = scan_triton.ssm_scan(x.float(), delta, A, Bc.float(), Cc.float(),
+                                         self.D.float())
+            else:
+                a = torch.exp(delta.unsqueeze(-1) * A)             # (B,L,E,N)
+                b = delta.unsqueeze(-1) * Bc.unsqueeze(2).float() * x.unsqueeze(-1).float()
+                h = scan(a, b, self.chunk)
+                y = (h * Cc.unsqueeze(2).float()).sum(-1) + self.D.float() * x.float()
         return self.out_proj(y * F.silu(z))
 
 
