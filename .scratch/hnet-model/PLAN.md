@@ -240,6 +240,16 @@ Consequence: a 24M run would sit at ~20 bytes/param -- at the heuristic optimum 
 expected gain over 1.4173 is a few percent, not a step change. The price of that run depends
 entirely on the throughput probe, which is why the probe comes first.
 
+## Decision resolved (2026-11-01): write up, spend nothing further
+
+User approved the recommendation. The fixed-patch control stays shelved (design exists, ~10
+lines + CPU tests, ready under a fresh quota). Outcome recorded in `docs/RESULTS_ENG.md`:
+FLAT verdict stands, external validation via main-horse's published 1e16–1e18 curves (our
+1.4173 @ 3.01e16 sits on their curve family), and the blog's 1.28× multiplier is a large-scale
+claim with identified confounds that two independent implementations fail to see at small
+scale. Remaining quota (10.04 h) is reserved for audio/vision phases or the fixed-patch
+ablation — not for extending this ladder.
+
 ## Deviation log
 
 *(newest first; each entry states what changed, why, and who approved it)*

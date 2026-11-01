@@ -3,6 +3,9 @@
 **A small-scale, replicated measurement of character alignment in learned chunking, and four
 interpretations that the data killed along the way.**
 
+*(The compute-efficiency half of the project — the English scaling runs and their verdict on
+the blog's 1.28× claim — is written up separately in [RESULTS_ENG.md](RESULTS_ENG.md).)*
+
 ## The claim
 
 At 0.84 M parameters, trained 5000 steps on raw bytes with a 1-stage H-Net, the chunker places
