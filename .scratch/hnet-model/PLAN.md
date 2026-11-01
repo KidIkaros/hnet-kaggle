@@ -240,6 +240,13 @@ Consequence: a 24M run would sit at ~20 bytes/param -- at the heuristic optimum 
 expected gain over 1.4173 is a few percent, not a step change. The price of that run depends
 entirely on the throughput probe, which is why the probe comes first.
 
+## Next phase
+
+Designed, not started: `docs/AUDIO_PHASE.md` — LibriSpeech 100 h byte build (free, CPU) then
+the same two-budget ladder with onset-lift and byte-phase diagnostics as the emergence
+metrics. Full ladder ~7.65 h vs 8.05 h remaining → scheduled after the 2026-11-07 reset.
+Preregistered kill criteria are in the doc.
+
 ## Decision resolved (2026-11-01): write up, spend nothing further
 
 User approved the recommendation. The fixed-patch control stays shelved (design exists, ~10
