@@ -151,4 +151,14 @@ explicitly, and a recorded null is worth more than an unrecorded guess.
 
 *(newest first; each entry states what changed, why, and who approved it)*
 
-- 2026-11-01 — Plan created from the four decisions agreed in conversation. No deviations yet.
+- 2026-11-01 — **DataParallel abandoned for step 1.** The dual-GPU smoke (0.08 h) failed in
+  replica 1: a parameter stayed on cuda:0 while the activation was on cuda:1, then gradient
+  checkpointing tripped a SavedTensorHooks assertion. `torch.compile` inside `DataParallel` is
+  the incompatibility -- compiled blocks hold references to the original module's parameters,
+  which `DataParallel` never replicates. Read from the traceback, not guessed.
+  **Replacement, which suits the purpose better:** two *independent* single-GPU jobs in
+  parallel, one per T4. Quota is billed per session, so two seeds in one 5.9 h session cost the
+  same as one seed alone -- the second seed is free in quota terms. No distributed training, no
+  replication, and it keeps the compiled path already proven at 274 ms/step on a T4. Awaiting
+  approval.
+- 2026-11-01 — Plan created from the four decisions agreed in conversation.
