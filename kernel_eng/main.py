@@ -1,139 +1,142 @@
 import json
 
-open("/tmp/eng.json", "w").write("{\"d_model\": 384, \"n_enc\": 4, \"n_main\": 6, \"n_dec\": 4, \"d_ff\": 1536, \"d_state\": 16, \"d_conv\": 4, \"n_heads\": 6, \"scan_chunk\": 64, \"target_ratio\": 6.0, \"alpha\": 0.3, \"seq_len\": 2048, \"batch\": 4, \"lr\": 0.001, \"warmup\": 2000, \"wd\": 0.1, \"clip\": 1.0, \"seeds\": [0], \"lr_mult_outer\": 2.0, \"lr_mult_main\": 1.5, \"compile_blocks\": false, \"grad_checkpoint\": true, \"resume\": true, \"save_every\": 500, \"max_steps\": 200000, \"eval_every\": 2000, \"log_every\": 100, \"wall_guard_s\": 32400, \"flops_budget\": 1.5e+16, \"note\": \"comparable rung: d384/4/6/4, 18.6M params, seq 2048, batch 4, official LR multipliers, alpha 0.3 (deviation from the paper's 0.03), fused Triton scan, 1.5e16 training FLOPs\", \"scan_impl\": \"triton\"}")
+open("/tmp/eng.json", "w").write("{\"d_model\": 384, \"n_enc\": 4, \"n_main\": 6, \"n_dec\": 4, \"d_ff\": 1536, \"d_state\": 16, \"d_conv\": 4, \"n_heads\": 6, \"scan_chunk\": 64, \"target_ratio\": 6.0, \"alpha\": 0.3, \"seq_len\": 2048, \"batch\": 4, \"lr\": 0.001, \"warmup\": 2000, \"wd\": 0.1, \"clip\": 1.0, \"seeds\": [0], \"lr_mult_outer\": 2.0, \"lr_mult_main\": 1.5, \"compile_blocks\": false, \"grad_checkpoint\": true, \"resume\": false, \"save_every\": 1000000000, \"max_steps\": 200000, \"eval_every\": 2, \"log_every\": 1, \"wall_guard_s\": 400, \"flops_budget\": 1200000000000.0, \"note\": \"smoke test of the built rung kernel: same geometry and scan, 3 steps\", \"scan_impl\": \"reference\"}")
+try:
 
-import torch
-import triton
-import triton.language as tl
-
-
-@triton.jit
-def _fwd(x_ptr, delta_ptr, A_ptr, Bc_ptr, Cc_ptr, D_ptr, y_ptr, h_ptr,
-         L, E: tl.constexpr, N: tl.constexpr, BE: tl.constexpr):
-    b = tl.program_id(0)
-    pe = tl.program_id(1)
-    e = pe * BE + tl.arange(0, BE)
-    n = tl.arange(0, N)
-    A = tl.load(A_ptr + e[:, None] * N + n[None, :])          # (BE, N)
-    Dv = tl.load(D_ptr + e)                                    # (BE,)
-    h = tl.zeros((BE, N), tl.float32)
-    for t in range(L):
-        row_e = (b * L + t) * E + e
-        row_n = (b * L + t) * N + n
-        x_t = tl.load(x_ptr + row_e)
-        d_t = tl.load(delta_ptr + row_e)
-        b_t = tl.load(Bc_ptr + row_n)
-        c_t = tl.load(Cc_ptr + row_n)
-        a = tl.exp(d_t[:, None] * A)
-        h = a * h + (d_t[:, None] * b_t[None, :]) * x_t[:, None]
-        tl.store(h_ptr + (b * L + t) * E * N + e[:, None] * N + n[None, :], h)
-        y = tl.sum(h * c_t[None, :], axis=1) + Dv * x_t
-        tl.store(y_ptr + row_e, y)
+    import torch
+    import triton
+    import triton.language as tl
 
 
-@triton.jit
-def _bwd(x_ptr, delta_ptr, A_ptr, Bc_ptr, Cc_ptr, D_ptr, h_ptr, dy_ptr,
-         dx_ptr, ddelta_ptr, dA_ptr, dBc_part_ptr, dCc_part_ptr, dD_ptr,
-         L, E: tl.constexpr, N: tl.constexpr, BE: tl.constexpr, NPE: tl.constexpr):
-    b = tl.program_id(0)
-    pe = tl.program_id(1)
-    e = pe * BE + tl.arange(0, BE)
-    n = tl.arange(0, N)
-    A = tl.load(A_ptr + e[:, None] * N + n[None, :])
-    Dv = tl.load(D_ptr + e)
-
-    dh = tl.zeros((BE, N), tl.float32)          # carries dh_t * a_t, i.e. dL/dh_{t-1}'s factor
-    dA_acc = tl.zeros((BE, N), tl.float32)
-    dD_acc = tl.zeros((BE,), tl.float32)
-    base = (b * NPE + pe) * L * N
-
-    for step in range(L):
-        t = L - 1 - step
-        row_e = (b * L + t) * E + e
-        row_n = (b * L + t) * N + n
-        x_t = tl.load(x_ptr + row_e)
-        d_t = tl.load(delta_ptr + row_e)
-        b_t = tl.load(Bc_ptr + row_n)
-        c_t = tl.load(Cc_ptr + row_n)
-        dy_t = tl.load(dy_ptr + row_e)
-        h_t = tl.load(h_ptr + (b * L + t) * E * N + e[:, None] * N + n[None, :])
-
-        # h_{t-1}, branch-free: load t-1 clamped, then zero it when t == 0
-        prev = tl.maximum(t - 1, 0)
-        h_prev = tl.load(h_ptr + (b * L + prev) * E * N + e[:, None] * N + n[None, :])
-        h_prev = tl.where(t > 0, h_prev, 0.0)
-
-        dh = c_t[None, :] * dy_t[:, None] + dh       # dh_t = c_t*dy_t + dh_{t+1}*a_{t+1}
-        a = tl.exp(d_t[:, None] * A)
-
-        dx_t = tl.sum(dh * (d_t[:, None] * b_t[None, :]), axis=1) + Dv * dy_t
-        ddelta_t = tl.sum(dh * (b_t[None, :] * x_t[:, None]), axis=1) \
-            + tl.sum(dh * h_prev * a * A, axis=1)
-        dA_acc += dh * h_prev * a * d_t[:, None]
-        dD_acc += dy_t * x_t
-
-        tl.store(dx_ptr + row_e, dx_t)
-        tl.store(ddelta_ptr + row_e, ddelta_t)
-        # the two E-reductions: one row per byte, per E-block, summed by the caller
-        tl.store(dBc_part_ptr + base + t * N + n,
-                 (dh * (d_t[:, None] * x_t[:, None])).sum(0))
-        tl.store(dCc_part_ptr + base + t * N + n, (dy_t[:, None] * h_t).sum(0))
-
-        dh = dh * a                                   # carry for t-1
-
-    # dA and dD are reduced over t *and* over the batch, and every batch's program would
-    # write the same slice, so each writes its own and the caller sums over the batch.
-    tl.store(dA_ptr + (b * E + e)[:, None] * N + n[None, :], dA_acc)
-    tl.store(dD_ptr + b * E + e, dD_acc)
+    @triton.jit
+    def _fwd(x_ptr, delta_ptr, A_ptr, Bc_ptr, Cc_ptr, D_ptr, y_ptr, h_ptr,
+             L, E: tl.constexpr, N: tl.constexpr, BE: tl.constexpr):
+        b = tl.program_id(0)
+        pe = tl.program_id(1)
+        e = pe * BE + tl.arange(0, BE)
+        n = tl.arange(0, N)
+        A = tl.load(A_ptr + e[:, None] * N + n[None, :])          # (BE, N)
+        Dv = tl.load(D_ptr + e)                                    # (BE,)
+        h = tl.zeros((BE, N), tl.float32)
+        for t in range(L):
+            row_e = (b * L + t) * E + e
+            row_n = (b * L + t) * N + n
+            x_t = tl.load(x_ptr + row_e)
+            d_t = tl.load(delta_ptr + row_e)
+            b_t = tl.load(Bc_ptr + row_n)
+            c_t = tl.load(Cc_ptr + row_n)
+            a = tl.exp(d_t[:, None] * A)
+            h = a * h + (d_t[:, None] * b_t[None, :]) * x_t[:, None]
+            tl.store(h_ptr + (b * L + t) * E * N + e[:, None] * N + n[None, :], h)
+            y = tl.sum(h * c_t[None, :], axis=1) + Dv * x_t
+            tl.store(y_ptr + row_e, y)
 
 
-class SSMScan(torch.autograd.Function):
-    """y = readout(scan(x, delta, A, Bc, Cc)) + D * x, with a fused backward."""
+    @triton.jit
+    def _bwd(x_ptr, delta_ptr, A_ptr, Bc_ptr, Cc_ptr, D_ptr, h_ptr, dy_ptr,
+             dx_ptr, ddelta_ptr, dA_ptr, dBc_part_ptr, dCc_part_ptr, dD_ptr,
+             L, E: tl.constexpr, N: tl.constexpr, BE: tl.constexpr, NPE: tl.constexpr):
+        b = tl.program_id(0)
+        pe = tl.program_id(1)
+        e = pe * BE + tl.arange(0, BE)
+        n = tl.arange(0, N)
+        A = tl.load(A_ptr + e[:, None] * N + n[None, :])
+        Dv = tl.load(D_ptr + e)
 
-    @staticmethod
-    def forward(ctx, x, delta, A, Bc, Cc, D):
-        B, L, E = x.shape
-        N = A.shape[1]
-        BE = 32
-        if E % BE or (N & (N - 1)):
-            raise ValueError(f"unsupported shape E={E} N={N}")
-        x = x.contiguous()
-        delta = delta.contiguous()
-        A = A.contiguous()
-        Bc = Bc.contiguous()
-        Cc = Cc.contiguous()
-        D = D.contiguous()
-        y = torch.empty_like(x)
-        h = torch.empty((B, L, E, N), device=x.device, dtype=torch.float32)
-        _fwd[(B, E // BE)](x, delta, A, Bc, Cc, D, y, h, L, E, N, BE)
-        ctx.save_for_backward(x, delta, A, Bc, Cc, D, h)
-        ctx.shape = (B, L, E, N, BE)
-        return y
+        dh = tl.zeros((BE, N), tl.float32)          # carries dh_t * a_t, i.e. dL/dh_{t-1}'s factor
+        dA_acc = tl.zeros((BE, N), tl.float32)
+        dD_acc = tl.zeros((BE,), tl.float32)
+        base = (b * NPE + pe) * L * N
 
-    @staticmethod
-    def backward(ctx, dy):
-        x, delta, A, Bc, Cc, D, h = ctx.saved_tensors
-        B, L, E, N, BE = ctx.shape
-        dy = dy.contiguous()
-        NPE = E // BE
-        dx = torch.empty_like(x)
-        ddelta = torch.empty_like(delta)
-        dA_part = torch.zeros((B, E, N), device=x.device)
-        dD_part = torch.zeros((B, E), device=x.device)
-        dBc_part = torch.zeros((B, NPE, L, N), device=x.device)
-        dCc_part = torch.zeros((B, NPE, L, N), device=x.device)
-        _bwd[(B, NPE)](x, delta, A, Bc, Cc, D, h, dy, dx, ddelta, dA_part,
-                       dBc_part, dCc_part, dD_part, L, E, N, BE, NPE)
-        dBc = dBc_part.sum(dim=1)
-        dCc = dCc_part.sum(dim=1)
-        dA = dA_part.sum(dim=0)
-        dD = dD_part.sum(dim=0)
-        return dx, ddelta, dA, dBc, dCc, dD
+        for step in range(L):
+            t = L - 1 - step
+            row_e = (b * L + t) * E + e
+            row_n = (b * L + t) * N + n
+            x_t = tl.load(x_ptr + row_e)
+            d_t = tl.load(delta_ptr + row_e)
+            b_t = tl.load(Bc_ptr + row_n)
+            c_t = tl.load(Cc_ptr + row_n)
+            dy_t = tl.load(dy_ptr + row_e)
+            h_t = tl.load(h_ptr + (b * L + t) * E * N + e[:, None] * N + n[None, :])
+
+            # h_{t-1}, branch-free: load t-1 clamped, then zero it when t == 0
+            prev = tl.maximum(t - 1, 0)
+            h_prev = tl.load(h_ptr + (b * L + prev) * E * N + e[:, None] * N + n[None, :])
+            h_prev = tl.where(t > 0, h_prev, 0.0)
+
+            dh = c_t[None, :] * dy_t[:, None] + dh       # dh_t = c_t*dy_t + dh_{t+1}*a_{t+1}
+            a = tl.exp(d_t[:, None] * A)
+
+            dx_t = tl.sum(dh * (d_t[:, None] * b_t[None, :]), axis=1) + Dv * dy_t
+            ddelta_t = tl.sum(dh * (b_t[None, :] * x_t[:, None]), axis=1) \
+                + tl.sum(dh * h_prev * a * A, axis=1)
+            dA_acc += dh * h_prev * a * d_t[:, None]
+            dD_acc += dy_t * x_t
+
+            tl.store(dx_ptr + row_e, dx_t)
+            tl.store(ddelta_ptr + row_e, ddelta_t)
+            # the two E-reductions: one row per byte, per E-block, summed by the caller
+            tl.store(dBc_part_ptr + base + t * N + n,
+                     (dh * (d_t[:, None] * x_t[:, None])).sum(0))
+            tl.store(dCc_part_ptr + base + t * N + n, (dy_t[:, None] * h_t).sum(0))
+
+            dh = dh * a                                   # carry for t-1
+
+        # dA and dD are reduced over t *and* over the batch, and every batch's program would
+        # write the same slice, so each writes its own and the caller sums over the batch.
+        tl.store(dA_ptr + (b * E + e)[:, None] * N + n[None, :], dA_acc)
+        tl.store(dD_ptr + b * E + e, dD_acc)
 
 
-def ssm_scan(x, delta, A, Bc, Cc, D):
-    """Fused scan + readout. Same result as the reference path in model.py."""
-    return SSMScan.apply(x, delta, A, Bc, Cc, D)
+    class SSMScan(torch.autograd.Function):
+        """y = readout(scan(x, delta, A, Bc, Cc)) + D * x, with a fused backward."""
+
+        @staticmethod
+        def forward(ctx, x, delta, A, Bc, Cc, D):
+            B, L, E = x.shape
+            N = A.shape[1]
+            BE = 32
+            if E % BE or (N & (N - 1)):
+                raise ValueError(f"unsupported shape E={E} N={N}")
+            x = x.contiguous()
+            delta = delta.contiguous()
+            A = A.contiguous()
+            Bc = Bc.contiguous()
+            Cc = Cc.contiguous()
+            D = D.contiguous()
+            y = torch.empty_like(x)
+            h = torch.empty((B, L, E, N), device=x.device, dtype=torch.float32)
+            _fwd[(B, E // BE)](x, delta, A, Bc, Cc, D, y, h, L, E, N, BE)
+            ctx.save_for_backward(x, delta, A, Bc, Cc, D, h)
+            ctx.shape = (B, L, E, N, BE)
+            return y
+
+        @staticmethod
+        def backward(ctx, dy):
+            x, delta, A, Bc, Cc, D, h = ctx.saved_tensors
+            B, L, E, N, BE = ctx.shape
+            dy = dy.contiguous()
+            NPE = E // BE
+            dx = torch.empty_like(x)
+            ddelta = torch.empty_like(delta)
+            dA_part = torch.zeros((B, E, N), device=x.device)
+            dD_part = torch.zeros((B, E), device=x.device)
+            dBc_part = torch.zeros((B, NPE, L, N), device=x.device)
+            dCc_part = torch.zeros((B, NPE, L, N), device=x.device)
+            _bwd[(B, NPE)](x, delta, A, Bc, Cc, D, h, dy, dx, ddelta, dA_part,
+                           dBc_part, dCc_part, dD_part, L, E, N, BE, NPE)
+            dBc = dBc_part.sum(dim=1)
+            dCc = dCc_part.sum(dim=1)
+            dA = dA_part.sum(dim=0)
+            dD = dD_part.sum(dim=0)
+            return dx, ddelta, dA, dBc, dCc, dD
+
+
+    def ssm_scan(x, delta, A, Bc, Cc, D):
+        """Fused scan + readout. Same result as the reference path in model.py."""
+        return SSMScan.apply(x, delta, A, Bc, Cc, D)
+except Exception:
+    scan_triton = None
 
 def _inlined_scan_module():
     class _InlinedScan:
@@ -866,8 +869,13 @@ def evaluate(model, docs, seq_len, batch, n_batches=40, seed=0):
             x = torch.from_numpy(out.astype(np.int64)).to(DEV)
             m = torch.from_numpy(mask).to(DEV)
             logits, aux = model(x)
-            ls = F.cross_entropy(logits.reshape(-1, 256), x.reshape(-1), reduction="none")
-            mm = m.reshape(-1)
+            # logits[t] predicts byte t+1, so the target is x[:, 1:] and the mask shifts with
+            # it. Comparing logits[t] against x[t] instead measures the model's guess for a
+            # byte it is being shown -- which scored 13.2 bpb, worse than uniform, on a run
+            # whose training bpb had reached 1.44.
+            ls = F.cross_entropy(logits[:, :-1].reshape(-1, 256),
+                                 x[:, 1:].reshape(-1), reduction="none")
+            mm = m[:, 1:].reshape(-1)
             tot_nll += float((ls * mm).sum().item())
             tot_bytes += float(mm.sum().item())
     model.train()
@@ -896,6 +904,36 @@ def load_state(model, opt, scaler, path):
     return ck
 
 
+def self_check(model, train, seq_len, batch):
+    """Prove the evaluation path measures what training measures, before spending hours.
+
+    The first rung trained correctly and was scored by an evaluate() that compared logits[t]
+    with byte t instead of t+1. Nothing in the loss curve showed it; the run looked broken
+    only in a metric nobody could trust. This compares the two paths on the same batch and
+    refuses to start if they disagree.
+    """
+    model.eval()
+    with torch.no_grad():
+        ev = evaluate(model, train, seq_len, batch, n_batches=1)
+        rng = np.random.default_rng(0)
+        starts, widths, order = batch_plan(train, batch, seq_len, rng)
+        out, mask = make_batch(train, int(starts[order[0]]), int(widths[order[0]]),
+                               batch, seq_len)
+        x = torch.from_numpy(out.astype(np.int64)).to(DEV)
+        m = torch.from_numpy(mask).to(DEV)
+        logits, _ = model(x)
+        ce, _ = masked_loss(logits[:, :-1], x[:, 1:], m[:, 1:])
+    model.train()
+    train_bpb = float(ce) / math.log(2)
+    if abs(train_bpb - ev["bpb"]) > 0.05:
+        raise RuntimeError(
+            f"evaluation disagrees with the training loss on the same batch: "
+            f"evaluate() says {ev['bpb']:.3f} bpb, the training path says {train_bpb:.3f}. "
+            f"Refusing to train against a metric that is measuring something else.")
+    log(f"self-check: evaluation and training agree on the same batch "
+        f"({ev['bpb']:.3f} vs {train_bpb:.3f} bpb)")
+
+
 def main():
     log("device", DEV)
     log("corpus", CORPUS)
@@ -915,9 +953,16 @@ def main():
     want = CFG.get("scan_impl") or ("compiled" if CFG.get("compile_blocks", True) else "reference")
     # Fail loudly rather than falling back: the reference scan is 3.5x slower, and a silent
     # fallback would burn the whole GPU session instead of stopping in the first second.
-    if want == "triton" and scan_triton is None:
-        raise RuntimeError("config asks for the fused Triton scan but scan_triton did not "
-                           "import; refusing to fall back to the slower reference scan")
+    if want == "triton":
+        # Three ways the fused path can be quietly unavailable. Each would turn an 8 h run
+        # into a 30 h one, so each refuses rather than falling back.
+        if scan_triton is None:
+            raise RuntimeError("config asks for the fused scan but scan_triton did not import")
+        if DEV != "cuda":
+            raise RuntimeError("config asks for the fused scan but there is no CUDA device")
+        if cfg.d_model % 32:
+            raise RuntimeError(f"config asks for the fused scan but d_model {cfg.d_model} is "
+                               f"not a multiple of the kernel's block size")
     SCAN_IMPL = want
     if want == "compiled":
         compile_ssm_blocks(model)
@@ -943,6 +988,8 @@ def main():
                   "chunk_len_assumed": assumed_chunk})
     log(f"budget {budget:.4e} training FLOPs -> {max_steps} steps "
         f"({per_step:.4e} FLOPs/step, {flops['training_flops_per_byte']:.4e} FLOPs/byte)")
+
+    self_check(model, train, SEQ_LEN, BATCH)
 
     rng = np.random.default_rng(CFG["seeds"][0])
     starts, widths, order = batch_plan(train, BATCH, SEQ_LEN, rng)
@@ -1003,6 +1050,14 @@ def main():
             ev = evaluate(model, val, SEQ_LEN, BATCH)
             evals.append({"step": step, **ev})
             log(f"  eval step {step}: held-out bpb {ev['bpb']:.4f} over {ev['bytes']} bytes")
+            # 8.0 bits is uniform over 256 symbols. Anything above it means the model is
+            # anti-predicting, which is a broken run or a broken metric -- not a slow start.
+            if ev["bpb"] > 8.05:
+                save_state(model, opt, scaler, step + 1, history, evals, best, flops,
+                           resume_from)
+                raise RuntimeError(
+                    f"held-out bpb {ev['bpb']:.3f} is above uniform (8.0): stopping instead of "
+                    f"spending more quota on a run that cannot be right")
             if best is None or ev["bpb"] < best["bpb"]:
                 best = {"step": step, **ev}
                 torch.save({"config": dict(cfg.__dict__), "seed": CFG["seeds"][0],

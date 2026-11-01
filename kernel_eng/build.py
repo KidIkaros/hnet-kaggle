@@ -15,6 +15,13 @@ model = re.sub(r'^""".*?"""\n', "", open(os.path.join(ROOT, "src", "model.py")).
 # The inlined scan is top-level code in this file, not an importable module, so model.py's
 # `import scan_triton` has to resolve to a shim over the functions already defined above it.
 model = model.replace("import scan_triton", "scan_triton = _inlined_scan_module()")
+# The scan's own imports are hard (triton is required), so the inlined block is guarded:
+# a missing dependency should leave scan_triton as None and let the driver refuse loudly,
+# rather than crashing the whole script before it can say why.
+_scan_lines = scan.splitlines()
+scan = ("try:\n"
+        + "\n".join(("    " + l) if l.strip() else l for l in _scan_lines)
+        + "\nexcept Exception:\n    scan_triton = None\n")
 SHIM = """
 def _inlined_scan_module():
     class _InlinedScan:

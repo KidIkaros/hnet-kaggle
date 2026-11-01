@@ -39,6 +39,29 @@ fi
 echo "=== QC ($CONFIG) ==="
 "$QC_PYTHON" tools/qc.py --config "$CONFIG" --quota-hours "$QUOTA_HOURS" $EXTRA
 
+# A tripwire against launching a long run by accident. Everything below this line costs
+# quota, and the failures that cost the most were runs nobody meant to start this way.
+STEPS=$(python3 - "$CONFIG" <<'PY'
+import json, sys
+sys.path.insert(0, "src")
+from flops import steps_for_budget
+from model import HNetConfig
+c = json.load(open(sys.argv[1]))
+f = {k: v for k, v in c.items() if k in HNetConfig.__dataclass_fields__}
+cfg = HNetConfig(**f)
+budget = float(c.get("flops_budget") or 1e16)
+print(steps_for_budget(cfg, int(c["seq_len"]), int(c["batch"]), cfg.target_ratio, budget)[0])
+PY
+)
+echo "derived steps: $STEPS"
+if [ "$STEPS" -gt 2000 ] && [ "${FULL:-0}" != "1" ]; then
+  echo
+  echo "refusing to push a ${STEPS}-step run without confirmation."
+  echo "This is a long run that will spend real quota. Re-run with FULL=1 to launch it:"
+  echo "    FULL=1 tools/preflight.sh $CONFIG $KERNEL_DIR"
+  exit 1
+fi
+
 echo "=== build ($KERNEL_DIR) ==="
 python3 "$KERNEL_DIR/build.py" "$CONFIG"
 python3 -m py_compile "$KERNEL_DIR/main.py"

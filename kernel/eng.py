@@ -165,6 +165,36 @@ def load_state(model, opt, scaler, path):
     return ck
 
 
+def self_check(model, train, seq_len, batch):
+    """Prove the evaluation path measures what training measures, before spending hours.
+
+    The first rung trained correctly and was scored by an evaluate() that compared logits[t]
+    with byte t instead of t+1. Nothing in the loss curve showed it; the run looked broken
+    only in a metric nobody could trust. This compares the two paths on the same batch and
+    refuses to start if they disagree.
+    """
+    model.eval()
+    with torch.no_grad():
+        ev = evaluate(model, train, seq_len, batch, n_batches=1)
+        rng = np.random.default_rng(0)
+        starts, widths, order = batch_plan(train, batch, seq_len, rng)
+        out, mask = make_batch(train, int(starts[order[0]]), int(widths[order[0]]),
+                               batch, seq_len)
+        x = torch.from_numpy(out.astype(np.int64)).to(DEV)
+        m = torch.from_numpy(mask).to(DEV)
+        logits, _ = model(x)
+        ce, _ = masked_loss(logits[:, :-1], x[:, 1:], m[:, 1:])
+    model.train()
+    train_bpb = float(ce) / math.log(2)
+    if abs(train_bpb - ev["bpb"]) > 0.05:
+        raise RuntimeError(
+            f"evaluation disagrees with the training loss on the same batch: "
+            f"evaluate() says {ev['bpb']:.3f} bpb, the training path says {train_bpb:.3f}. "
+            f"Refusing to train against a metric that is measuring something else.")
+    log(f"self-check: evaluation and training agree on the same batch "
+        f"({ev['bpb']:.3f} vs {train_bpb:.3f} bpb)")
+
+
 def main():
     log("device", DEV)
     log("corpus", CORPUS)
@@ -184,9 +214,16 @@ def main():
     want = CFG.get("scan_impl") or ("compiled" if CFG.get("compile_blocks", True) else "reference")
     # Fail loudly rather than falling back: the reference scan is 3.5x slower, and a silent
     # fallback would burn the whole GPU session instead of stopping in the first second.
-    if want == "triton" and scan_triton is None:
-        raise RuntimeError("config asks for the fused Triton scan but scan_triton did not "
-                           "import; refusing to fall back to the slower reference scan")
+    if want == "triton":
+        # Three ways the fused path can be quietly unavailable. Each would turn an 8 h run
+        # into a 30 h one, so each refuses rather than falling back.
+        if scan_triton is None:
+            raise RuntimeError("config asks for the fused scan but scan_triton did not import")
+        if DEV != "cuda":
+            raise RuntimeError("config asks for the fused scan but there is no CUDA device")
+        if cfg.d_model % 32:
+            raise RuntimeError(f"config asks for the fused scan but d_model {cfg.d_model} is "
+                               f"not a multiple of the kernel's block size")
     SCAN_IMPL = want
     if want == "compiled":
         compile_ssm_blocks(model)
@@ -212,6 +249,8 @@ def main():
                   "chunk_len_assumed": assumed_chunk})
     log(f"budget {budget:.4e} training FLOPs -> {max_steps} steps "
         f"({per_step:.4e} FLOPs/step, {flops['training_flops_per_byte']:.4e} FLOPs/byte)")
+
+    self_check(model, train, SEQ_LEN, BATCH)
 
     rng = np.random.default_rng(CFG["seeds"][0])
     starts, widths, order = batch_plan(train, BATCH, SEQ_LEN, rng)
@@ -272,6 +311,16 @@ def main():
             ev = evaluate(model, val, SEQ_LEN, BATCH)
             evals.append({"step": step, **ev})
             log(f"  eval step {step}: held-out bpb {ev['bpb']:.4f} over {ev['bytes']} bytes")
+            # 8.0 bits is uniform over 256 symbols, and an untrained model sits right at it
+            # (7.94 in the first rung), so step 0 is exempt: the canary is for a run that has
+            # had a chance to learn and is still anti-predicting, which is a broken metric or
+            # a diverged run, not a slow start.
+            if step > 0 and ev["bpb"] > 8.5:
+                save_state(model, opt, scaler, step + 1, history, evals, best, flops,
+                           resume_from)
+                raise RuntimeError(
+                    f"held-out bpb {ev['bpb']:.3f} is far above uniform (8.0): stopping instead "
+                    f"of spending more quota on a run that cannot be right")
             if best is None or ev["bpb"] < best["bpb"]:
                 best = {"step": step, **ev}
                 torch.save({"config": dict(cfg.__dict__), "seed": CFG["seeds"][0],
