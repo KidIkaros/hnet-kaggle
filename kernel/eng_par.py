@@ -1,7 +1,7 @@
 # ==== PARALLEL LAUNCHER ====
 # Runs one independent training job per GPU, in one session.
 #
-# Why this instead of DataParallel: the dual-GPU smoke showed that torch.compile inside
+# Why this instead of DataParallel: the dual-GPU smoke showed torch.compile inside
 # DataParallel does not work here -- a parameter stays on cuda:0 while its activation is on
 # cuda:1, and gradient checkpointing then trips a SavedTensorHooks assertion. The supported
 # alternative (DDP) needs a multi-process rewrite of the driver.
@@ -10,19 +10,20 @@
 # not per GPU, so two seeds finishing in 5.9 h cost the same as one seed finishing in 5.9 h:
 # the second seed is free, and it is the seed noise the write-up needs.
 #
-# Each job gets its own config, output directory and GPU. If one dies the other keeps going --
-# the session ends when the slower one does, so there is nothing to gain by killing it.
+# Kaggle runs a script kernel as a single file copied to /kaggle/src/script.py; siblings are
+# not there. So the driver source travels inside this file, base64-encoded (build.py fills in
+# DRIVER_B64), and is written to a temporary path before the workers start.
 
+import base64
 import json
 import os
 import subprocess
 import sys
+import tempfile
 import time
 
-# resolve the driver next to this file, not next to the working directory: the launcher is
-# run from the repo root in a dry run and from /kaggle/working in a session, and only one of
-# those happens to have eng_driver.py in the cwd.
-HERE = os.path.dirname(os.path.abspath(__file__))
+DRIVER_B64 = None  # replaced at build time
+
 OUT = os.environ.get("OUT_DIR", "/kaggle/working")
 BASE = json.load(open(os.environ.get("CONFIG", "/tmp/eng.json")))
 
@@ -32,13 +33,20 @@ def log(*a):
 
 
 def main():
+    if not DRIVER_B64:
+        raise SystemExit("DRIVER_B64 was not filled in by build.py; this launcher cannot run")
     import torch
+
     n = torch.cuda.device_count() if torch.cuda.is_available() else 1
     seeds = list(BASE.get("seeds", [0])) or [0]
     while len(seeds) < n:
         seeds.append(seeds[-1] + 1)
     seeds = seeds[:n]
     log(f"{n} device(s) visible; one job per device, seeds {seeds}")
+
+    tmp = tempfile.mkdtemp()
+    driver = os.path.join(tmp, "eng_driver.py")
+    open(driver, "w").write(base64.b64decode(DRIVER_B64).decode())
 
     procs = []
     for i in range(n):
@@ -48,8 +56,7 @@ def main():
         cfg_path = os.path.join(d, "config.json")
         json.dump(cfg, open(cfg_path, "w"), indent=2)
         env = dict(os.environ, CUDA_VISIBLE_DEVICES=str(i), CONFIG=cfg_path, OUT_DIR=d)
-        p = subprocess.Popen([sys.executable, os.path.join(HERE, "eng_driver.py")],
-                             env=env, cwd=HERE)
+        p = subprocess.Popen([sys.executable, driver], env=env, cwd=tmp)
         procs.append((seeds[i], p))
         log(f"seed {seeds[i]} -> cuda:{i}, out {d}, pid {p.pid}")
 

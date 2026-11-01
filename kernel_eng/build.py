@@ -47,11 +47,23 @@ out = ("import json\n" + inline_cfg + scan + SHIM + model + "\n" + flops + "\n" 
 open(os.path.join(OUT, "eng_driver.py"), "w").write(out)
 # The launcher needs the same baked config, and must not depend on CONFIG being set in the
 # environment: Kaggle sets no such variable. A local dry run that passes CONFIG explicitly
-# hides this, which is exactly how the first launch failed.
-open(os.path.join(OUT, "main.py"), "w").write(
-    "import json\n" + inline_cfg + open(os.path.join(ROOT, "kernel", "eng_par.py")).read())
+# hides this, which is how the first launch failed.
+#
+# It also has to carry the driver: Kaggle copies only code_file to /kaggle/src/script.py, so a
+# sibling eng_driver.py does not exist there. Base64 keeps the embedding free of quoting
+# hazards, which a triple-quoted literal would not.
+import base64 as _b64
+_launcher = open(os.path.join(ROOT, "kernel", "eng_par.py")).read()
+_launcher = _launcher.replace("DRIVER_B64 = None  # replaced at build time",
+                              f"DRIVER_B64 = {_b64.b64encode(out.encode()).decode()!r}")
+assert "DRIVER_B64 = None" not in _launcher, "the launcher placeholder was not replaced"
+open(os.path.join(OUT, "main.py"), "w").write("import json\n" + inline_cfg + _launcher)
 
-json.dump({"id": "mauricew/hnet-english-rung", "title": "hnet english rung",
+# The slug is derived from the title, so they must agree or the push lands on a different
+# kernel than the id says -- which happened once and cost a launch.
+_kid = os.environ.get("KERNEL_ID", "mauricew/hnet-english-rung")
+_ktitle = _kid.split("/")[-1].replace("-", " ")
+json.dump({"id": _kid, "title": _ktitle,
            "code_file": "main.py", "language": "python", "kernel_type": "script",
            "is_private": True, "enable_gpu": True, "enable_tpu": False,
            "enable_internet": False, "keywords": [],
