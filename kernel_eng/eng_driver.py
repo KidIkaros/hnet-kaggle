@@ -1,6 +1,6 @@
 import json
 
-open("/tmp/eng.json", "w").write("{\"d_model\": 384, \"n_enc\": 4, \"n_main\": 6, \"n_dec\": 4, \"d_ff\": 1536, \"d_state\": 16, \"d_conv\": 4, \"n_heads\": 6, \"scan_chunk\": 64, \"target_ratio\": 6.0, \"alpha\": 0.3, \"seq_len\": 2048, \"batch\": 4, \"lr\": 0.001, \"warmup\": 2000, \"wd\": 0.1, \"clip\": 1.0, \"seeds\": [0, 1], \"lr_mult_outer\": 2.0, \"lr_mult_main\": 1.5, \"compile_blocks\": false, \"grad_checkpoint\": true, \"resume\": false, \"save_every\": 2, \"max_steps\": 200000, \"eval_every\": 2, \"log_every\": 1, \"wall_guard_s\": 600, \"flops_budget\": 1200000000000.0, \"note\": \"launcher dry run\", \"scan_impl\": \"triton\", \"data_parallel\": false, \"amp\": \"fp16\", \"eval_batches\": 1}")
+open("/tmp/eng.json", "w").write("{\"d_model\": 384, \"n_enc\": 4, \"n_main\": 6, \"n_dec\": 4, \"d_ff\": 1536, \"d_state\": 16, \"d_conv\": 4, \"n_heads\": 6, \"scan_chunk\": 64, \"target_ratio\": 6.0, \"alpha\": 0.3, \"seq_len\": 2048, \"batch\": 4, \"lr\": 0.001, \"warmup\": 2000, \"wd\": 0.1, \"clip\": 1.0, \"seeds\": [0, 1], \"lr_mult_outer\": 2.0, \"lr_mult_main\": 1.5, \"compile_blocks\": true, \"grad_checkpoint\": true, \"resume\": true, \"save_every\": 1000, \"max_steps\": 200000, \"eval_every\": 2000, \"log_every\": 200, \"wall_guard_s\": 25200, \"flops_budget\": 3e+16, \"note\": \"step 2: 3e16 nominal, both seeds in parallel, one per T4\", \"scan_impl\": \"triton\", \"data_parallel\": false, \"amp\": \"fp16\", \"eval_batches\": 40}")
 try:
 
     import torch

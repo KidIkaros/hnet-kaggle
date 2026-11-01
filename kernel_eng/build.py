@@ -45,8 +45,11 @@ out = ("import json\n" + inline_cfg + scan + SHIM + model + "\n" + flops + "\n" 
 # The driver is eng_driver.py; main.py is the launcher that runs one job per GPU. Kaggle runs
 # a single code_file, so the launcher has to be the entry point.
 open(os.path.join(OUT, "eng_driver.py"), "w").write(out)
+# The launcher needs the same baked config, and must not depend on CONFIG being set in the
+# environment: Kaggle sets no such variable. A local dry run that passes CONFIG explicitly
+# hides this, which is exactly how the first launch failed.
 open(os.path.join(OUT, "main.py"), "w").write(
-    open(os.path.join(ROOT, "kernel", "eng_par.py")).read())
+    "import json\n" + inline_cfg + open(os.path.join(ROOT, "kernel", "eng_par.py")).read())
 
 json.dump({"id": "mauricew/hnet-english-rung", "title": "hnet english rung",
            "code_file": "main.py", "language": "python", "kernel_type": "script",
