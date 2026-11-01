@@ -26,8 +26,15 @@ if [ ! -x "$QC_PYTHON" ]; then
   echo "         the performance stage will be skipped, not passed"
 fi
 
-EXTRA=""
-if [ "${SKIP_PERF:-0}" = "1" ]; then EXTRA="--no-perf"; fi
+# The performance stage runs on the owner's desktop GPU, so it is opt-in. Correctness and
+# static checks are cheap and always run; a measurement of one configuration is allowed with
+# PERF=local, and anything comparing configurations belongs on Kaggle as a short job.
+if [ "${PERF:-0}" = "local" ]; then
+  EXTRA="--perf-steps ${PERF_STEPS:-3}"
+else
+  EXTRA="--no-perf"
+  echo "note: skipping the GPU performance stage (set PERF=local to include one short measurement)"
+fi
 
 echo "=== QC ($CONFIG) ==="
 "$QC_PYTHON" tools/qc.py --config "$CONFIG" --quota-hours "$QUOTA_HOURS" $EXTRA

@@ -170,7 +170,14 @@ def masked_loss(logits, targets, mask):
 
 
 # -------------------------------------------------------------------- performance
-def stage_performance(cfg, seq_len, batch, budget, quota_hours, n=8, cfg_dict=None):
+def stage_performance(cfg, seq_len, batch, budget, quota_hours, n=3, cfg_dict=None,
+                      max_seconds=90.0):
+    """Measure one configuration. Deliberately small: this runs on the owner's desktop.
+
+    Three steps plus warmup is enough to catch an order-of-magnitude problem, which is all
+    this stage is for. Anything that compares configurations is a sweep, and a sweep belongs
+    on Kaggle as a short job, not on someone's workstation.
+    """
     print("\n-- performance")
     if not torch.cuda.is_available():
         skip("performance", "measured step time and memory", "no CUDA device in this interpreter")
@@ -190,6 +197,7 @@ def stage_performance(cfg, seq_len, batch, budget, quota_hours, n=8, cfg_dict=No
     opt = torch.optim.AdamW(m.parameters(), lr=1e-3)
     torch.cuda.empty_cache()
     torch.cuda.reset_peak_memory_stats()
+    t_start = time.perf_counter()
     for _ in range(2):
         logits, aux = m(x)
         F.cross_entropy(logits[:, :-1].reshape(-1, 256), x[:, 1:].reshape(-1)).backward()
@@ -202,6 +210,9 @@ def stage_performance(cfg, seq_len, batch, budget, quota_hours, n=8, cfg_dict=No
         opt.step()
     torch.cuda.synchronize()
     ms = (time.perf_counter() - t0) / n * 1000
+    if time.perf_counter() - t_start > max_seconds:
+        skip("performance", "measurement stayed within the local time budget",
+             f"took {time.perf_counter()-t_start:.0f}s")
     peak_gb = torch.cuda.max_memory_allocated() / 1e9
     achieved = training_flops_per_byte(cfg, seq_len, float(aux["bytes_per_chunk"])) \
         * batch * seq_len / (ms / 1000)
@@ -258,6 +269,8 @@ def main():
     ap.add_argument("--quota-hours", type=float, default=23.0,
                     help="GPU hours remaining on Kaggle")
     ap.add_argument("--no-perf", action="store_true", help="skip the GPU stage")
+    ap.add_argument("--perf-steps", type=int, default=3,
+                    help="timed steps in the GPU stage; keep this small on a workstation")
     args = ap.parse_args()
 
     cfg_dict = json.load(open(args.config)) or {}
@@ -276,6 +289,7 @@ def main():
     stage_correctness(cfg, seq_len, batch)
     perf = None if args.no_perf else stage_performance(cfg, seq_len, batch, budget,
                                                        args.quota_hours,
+                                                       n=args.perf_steps,
                                                        cfg_dict=cfg_dict)
     stage_spec(cfg_dict)
 
