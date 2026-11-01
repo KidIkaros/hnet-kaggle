@@ -13,7 +13,7 @@ traffic, not launches. This kernel removes the traffic:
             h = a * h + delta[t] * Bc[t] * x[t]
             y[t] = sum_n h[n] * Cc[t, n] + D * x[t]
 
-Traffic per block drops from ~7 GB to ~25 MB (the inputs and the output). The per-token state
+Traffic per block drops from ~7 GB to ~25 MB (the inputs and the output). The per-byte state
 is written once because the backward needs it; that is one (B,L,E,N) tensor per block instead
 of hundreds.
 
@@ -101,7 +101,7 @@ def _bwd(x_ptr, delta_ptr, A_ptr, Bc_ptr, Cc_ptr, D_ptr, h_ptr, dy_ptr,
 
         tl.store(dx_ptr + row_e, dx_t)
         tl.store(ddelta_ptr + row_e, ddelta_t)
-        # the two E-reductions: one row per token, per E-block, summed by the caller
+        # the two E-reductions: one row per byte, per E-block, summed by the caller
         tl.store(dBc_part_ptr + base + t * N + n,
                  (dh * (d_t[:, None] * x_t[:, None])).sum(0))
         tl.store(dCc_part_ptr + base + t * N + n, (dy_t[:, None] * h_t).sum(0))

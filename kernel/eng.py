@@ -176,9 +176,16 @@ def main():
     model = HNetLM(cfg).to(DEV)
     init_weights(model)
     global SCAN_IMPL
-    if CFG.get("compile_blocks", True):
-        SCAN_IMPL = "compiled"
+    want = CFG.get("scan_impl") or ("compiled" if CFG.get("compile_blocks", True) else "reference")
+    # Fail loudly rather than falling back: the reference scan is 3.5x slower, and a silent
+    # fallback would burn the whole GPU session instead of stopping in the first second.
+    if want == "triton" and scan_triton is None:
+        raise RuntimeError("config asks for the fused Triton scan but scan_triton did not "
+                           "import; refusing to fall back to the slower reference scan")
+    SCAN_IMPL = want
+    if want == "compiled":
         compile_ssm_blocks(model)
+    log(f"scan implementation: {SCAN_IMPL}")
     mo = float(CFG.get("lr_mult_outer", 1.0))
     mm = float(CFG.get("lr_mult_main", 1.0))
     groups = param_groups(model, mo, mm)

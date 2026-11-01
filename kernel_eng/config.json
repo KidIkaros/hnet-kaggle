@@ -21,15 +21,15 @@
   ],
   "lr_mult_outer": 2.0,
   "lr_mult_main": 1.5,
-  "compile_blocks": true,
+  "compile_blocks": false,
   "grad_checkpoint": true,
   "resume": false,
   "save_every": 1000000000,
   "max_steps": 200000,
-  "eval_every": 100,
-  "log_every": 10,
-  "wall_guard_s": 2400,
-  "flops_budget": 77000000000000.0,
-  "amp": "fp16",
-  "note": "throughput calibration at the rung geometry: 200 steps, logs ms/step and the realised chunk length, to size the real budget"
+  "eval_every": 2,
+  "log_every": 1,
+  "wall_guard_s": 400,
+  "flops_budget": 1200000000000.0,
+  "note": "smoke test of the built rung kernel: same geometry and scan, 3 steps",
+  "scan_impl": "triton"
 }

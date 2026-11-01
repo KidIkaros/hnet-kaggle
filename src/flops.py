@@ -9,7 +9,7 @@ Counts matmul + attention only (2*m*n per linear, 2*heads*L^2*d_head for attenti
 
 import math
 
-# per-parameter-element FLOPs for one token, relative to a linear of the same width
+# per-parameter-element FLOPs for one byte, relative to a linear of the same width
 LINEAR = 2
 
 # Training costs about three times the forward pass: one forward and two backward. This is
@@ -24,19 +24,19 @@ def model_flops_per_sequence(cfg, seq_len, chunk_len):
     n_chunks = max(seq_len / max(chunk_len, 1.0), 1.0)
     E = cfg.d_state
 
-    # one SSM block: in_proj(z,x) + conv + x_proj + dt_proj + out_proj, per token
-    ssm_tokens = (cfg.n_enc + cfg.n_dec) * seq_len
-    ssm_per_token = D * 2 * D + D * E + D * (D // 16 + 2 * E) + (D // 16) * D + D * D
-    ssm = ssm_tokens * ssm_per_token * LINEAR
+    # one SSM block: in_proj(z,x) + conv + x_proj + dt_proj + out_proj, per byte
+    ssm_bytes = (cfg.n_enc + cfg.n_dec) * seq_len
+    ssm_per_byte = D * 2 * D + D * E + D * (D // 16 + 2 * E) + (D // 16) * D + D * D
+    ssm = ssm_bytes * ssm_per_byte * LINEAR
 
-    # The scan's own arithmetic. The recurrence carries an (E, N) state per token, and the
+    # The scan's own arithmetic. The recurrence carries an (E, N) state per byte, and the
     # chunked scan does log2(chunk) rounds of shifts, multiplies and adds over it. At these
     # widths this is the same order as the block's matmuls, so leaving it out would make the
     # counter disagree with wall-clock by more than the parity tolerance -- which is exactly
     # what the parity gate measures.
     rounds = max(1, int(math.log2(max(cfg.scan_chunk, 2))))
-    scan_per_token = 3.0 * D * E * rounds      # state is (d_model, d_state) per token
-    ssm += ssm_tokens * scan_per_token
+    scan_per_byte = 3.0 * D * E * rounds      # state is (d_model, d_state) per byte
+    ssm += ssm_bytes * scan_per_byte
 
     # router: two projections at byte resolution
     router = seq_len * 2 * D * D * LINEAR

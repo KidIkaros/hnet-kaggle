@@ -1,12 +1,156 @@
 import json
 
-open("/tmp/eng.json", "w").write("{\"d_model\": 384, \"n_enc\": 4, \"n_main\": 6, \"n_dec\": 4, \"d_ff\": 1536, \"d_state\": 16, \"d_conv\": 4, \"n_heads\": 6, \"scan_chunk\": 64, \"target_ratio\": 6.0, \"alpha\": 0.3, \"seq_len\": 2048, \"batch\": 4, \"lr\": 0.001, \"warmup\": 2000, \"wd\": 0.1, \"clip\": 1.0, \"seeds\": [0], \"lr_mult_outer\": 2.0, \"lr_mult_main\": 1.5, \"compile_blocks\": true, \"grad_checkpoint\": true, \"resume\": false, \"save_every\": 1000000000, \"max_steps\": 200000, \"eval_every\": 100, \"log_every\": 10, \"wall_guard_s\": 2400, \"flops_budget\": 77000000000000.0, \"amp\": \"fp16\", \"note\": \"throughput calibration at the rung geometry: 200 steps, logs ms/step and the realised chunk length, to size the real budget\"}")
+open("/tmp/eng.json", "w").write("{\"d_model\": 384, \"n_enc\": 4, \"n_main\": 6, \"n_dec\": 4, \"d_ff\": 1536, \"d_state\": 16, \"d_conv\": 4, \"n_heads\": 6, \"scan_chunk\": 64, \"target_ratio\": 6.0, \"alpha\": 0.3, \"seq_len\": 2048, \"batch\": 4, \"lr\": 0.001, \"warmup\": 2000, \"wd\": 0.1, \"clip\": 1.0, \"seeds\": [0], \"lr_mult_outer\": 2.0, \"lr_mult_main\": 1.5, \"compile_blocks\": false, \"grad_checkpoint\": true, \"resume\": false, \"save_every\": 1000000000, \"max_steps\": 200000, \"eval_every\": 2, \"log_every\": 1, \"wall_guard_s\": 400, \"flops_budget\": 1200000000000.0, \"note\": \"smoke test of the built rung kernel: same geometry and scan, 3 steps\", \"scan_impl\": \"triton\"}")
+
+import torch
+import triton
+import triton.language as tl
+
+
+@triton.jit
+def _fwd(x_ptr, delta_ptr, A_ptr, Bc_ptr, Cc_ptr, D_ptr, y_ptr, h_ptr,
+         L, E: tl.constexpr, N: tl.constexpr, BE: tl.constexpr):
+    b = tl.program_id(0)
+    pe = tl.program_id(1)
+    e = pe * BE + tl.arange(0, BE)
+    n = tl.arange(0, N)
+    A = tl.load(A_ptr + e[:, None] * N + n[None, :])          # (BE, N)
+    Dv = tl.load(D_ptr + e)                                    # (BE,)
+    h = tl.zeros((BE, N), tl.float32)
+    for t in range(L):
+        row_e = (b * L + t) * E + e
+        row_n = (b * L + t) * N + n
+        x_t = tl.load(x_ptr + row_e)
+        d_t = tl.load(delta_ptr + row_e)
+        b_t = tl.load(Bc_ptr + row_n)
+        c_t = tl.load(Cc_ptr + row_n)
+        a = tl.exp(d_t[:, None] * A)
+        h = a * h + (d_t[:, None] * b_t[None, :]) * x_t[:, None]
+        tl.store(h_ptr + (b * L + t) * E * N + e[:, None] * N + n[None, :], h)
+        y = tl.sum(h * c_t[None, :], axis=1) + Dv * x_t
+        tl.store(y_ptr + row_e, y)
+
+
+@triton.jit
+def _bwd(x_ptr, delta_ptr, A_ptr, Bc_ptr, Cc_ptr, D_ptr, h_ptr, dy_ptr,
+         dx_ptr, ddelta_ptr, dA_ptr, dBc_part_ptr, dCc_part_ptr, dD_ptr,
+         L, E: tl.constexpr, N: tl.constexpr, BE: tl.constexpr, NPE: tl.constexpr):
+    b = tl.program_id(0)
+    pe = tl.program_id(1)
+    e = pe * BE + tl.arange(0, BE)
+    n = tl.arange(0, N)
+    A = tl.load(A_ptr + e[:, None] * N + n[None, :])
+    Dv = tl.load(D_ptr + e)
+
+    dh = tl.zeros((BE, N), tl.float32)          # carries dh_t * a_t, i.e. dL/dh_{t-1}'s factor
+    dA_acc = tl.zeros((BE, N), tl.float32)
+    dD_acc = tl.zeros((BE,), tl.float32)
+    base = (b * NPE + pe) * L * N
+
+    for step in range(L):
+        t = L - 1 - step
+        row_e = (b * L + t) * E + e
+        row_n = (b * L + t) * N + n
+        x_t = tl.load(x_ptr + row_e)
+        d_t = tl.load(delta_ptr + row_e)
+        b_t = tl.load(Bc_ptr + row_n)
+        c_t = tl.load(Cc_ptr + row_n)
+        dy_t = tl.load(dy_ptr + row_e)
+        h_t = tl.load(h_ptr + (b * L + t) * E * N + e[:, None] * N + n[None, :])
+
+        # h_{t-1}, branch-free: load t-1 clamped, then zero it when t == 0
+        prev = tl.maximum(t - 1, 0)
+        h_prev = tl.load(h_ptr + (b * L + prev) * E * N + e[:, None] * N + n[None, :])
+        h_prev = tl.where(t > 0, h_prev, 0.0)
+
+        dh = c_t[None, :] * dy_t[:, None] + dh       # dh_t = c_t*dy_t + dh_{t+1}*a_{t+1}
+        a = tl.exp(d_t[:, None] * A)
+
+        dx_t = tl.sum(dh * (d_t[:, None] * b_t[None, :]), axis=1) + Dv * dy_t
+        ddelta_t = tl.sum(dh * (b_t[None, :] * x_t[:, None]), axis=1) \
+            + tl.sum(dh * h_prev * a * A, axis=1)
+        dA_acc += dh * h_prev * a * d_t[:, None]
+        dD_acc += dy_t * x_t
+
+        tl.store(dx_ptr + row_e, dx_t)
+        tl.store(ddelta_ptr + row_e, ddelta_t)
+        # the two E-reductions: one row per byte, per E-block, summed by the caller
+        tl.store(dBc_part_ptr + base + t * N + n,
+                 (dh * (d_t[:, None] * x_t[:, None])).sum(0))
+        tl.store(dCc_part_ptr + base + t * N + n, (dy_t[:, None] * h_t).sum(0))
+
+        dh = dh * a                                   # carry for t-1
+
+    # dA and dD are reduced over t *and* over the batch, and every batch's program would
+    # write the same slice, so each writes its own and the caller sums over the batch.
+    tl.store(dA_ptr + (b * E + e)[:, None] * N + n[None, :], dA_acc)
+    tl.store(dD_ptr + b * E + e, dD_acc)
+
+
+class SSMScan(torch.autograd.Function):
+    """y = readout(scan(x, delta, A, Bc, Cc)) + D * x, with a fused backward."""
+
+    @staticmethod
+    def forward(ctx, x, delta, A, Bc, Cc, D):
+        B, L, E = x.shape
+        N = A.shape[1]
+        BE = 32
+        if E % BE or (N & (N - 1)):
+            raise ValueError(f"unsupported shape E={E} N={N}")
+        x = x.contiguous()
+        delta = delta.contiguous()
+        A = A.contiguous()
+        Bc = Bc.contiguous()
+        Cc = Cc.contiguous()
+        D = D.contiguous()
+        y = torch.empty_like(x)
+        h = torch.empty((B, L, E, N), device=x.device, dtype=torch.float32)
+        _fwd[(B, E // BE)](x, delta, A, Bc, Cc, D, y, h, L, E, N, BE)
+        ctx.save_for_backward(x, delta, A, Bc, Cc, D, h)
+        ctx.shape = (B, L, E, N, BE)
+        return y
+
+    @staticmethod
+    def backward(ctx, dy):
+        x, delta, A, Bc, Cc, D, h = ctx.saved_tensors
+        B, L, E, N, BE = ctx.shape
+        dy = dy.contiguous()
+        NPE = E // BE
+        dx = torch.empty_like(x)
+        ddelta = torch.empty_like(delta)
+        dA_part = torch.zeros((B, E, N), device=x.device)
+        dD_part = torch.zeros((B, E), device=x.device)
+        dBc_part = torch.zeros((B, NPE, L, N), device=x.device)
+        dCc_part = torch.zeros((B, NPE, L, N), device=x.device)
+        _bwd[(B, NPE)](x, delta, A, Bc, Cc, D, h, dy, dx, ddelta, dA_part,
+                       dBc_part, dCc_part, dD_part, L, E, N, BE, NPE)
+        dBc = dBc_part.sum(dim=1)
+        dCc = dCc_part.sum(dim=1)
+        dA = dA_part.sum(dim=0)
+        dD = dD_part.sum(dim=0)
+        return dx, ddelta, dA, dBc, dCc, dD
+
+
+def ssm_scan(x, delta, A, Bc, Cc, D):
+    """Fused scan + readout. Same result as the reference path in model.py."""
+    return SSMScan.apply(x, delta, A, Bc, Cc, D)
+
+def _inlined_scan_module():
+    class _InlinedScan:
+        ssm_scan = staticmethod(ssm_scan)
+    return _InlinedScan()
+
 
 from dataclasses import dataclass
 import math
 
 import torch
 import torch.nn as nn
+
+try:
+    scan_triton = _inlined_scan_module()
+except Exception:                       # triton is optional: CPU-only paths must still work
+    scan_triton = None
 import torch.nn.functional as F
 
 
@@ -92,8 +236,16 @@ def sequential_scan(a, b):
     return torch.stack(outs, dim=1)
 
 
-SCAN_IMPL = "fast"          # "reference" | "fast" | "compiled"
+SCAN_IMPL = "fast"          # "reference" | "fast" | "compiled" | "triton"
 _COMPILED_SCAN = None
+
+
+def _triton_ok(x, A):
+    """The fused kernel needs a CUDA device, E divisible by its block, and a power-of-two N."""
+    if scan_triton is None or not x.is_cuda or x.shape[-1] % 32:
+        return False
+    n = A.shape[-1]
+    return n & (n - 1) == 0
 
 
 def scan(a, b, chunk):
@@ -190,11 +342,16 @@ class SSMBlock(nn.Module):
         with torch.autocast(device_type=x.device.type, enabled=False):
             A = -torch.exp(self.A_log.float())                     # (E,N)
             delta = delta.float()
-            a = torch.exp(delta.unsqueeze(-1) * A)                 # (B,L,E,N)
-            b = delta.unsqueeze(-1) * Bc.unsqueeze(2).float() * x.unsqueeze(-1).float()
-
-            h = scan(a, b, self.chunk)
-        y = (h * Cc.unsqueeze(2).float()).sum(-1) + self.D.float() * x.float()
+            if SCAN_IMPL == "triton" and _triton_ok(x, A):
+                # One fused kernel: the state stays in registers, so the (B,L,E,N)
+                # intermediates that dominated the step are never materialised.
+                y = scan_triton.ssm_scan(x.float(), delta, A, Bc.float(), Cc.float(),
+                                         self.D.float())
+            else:
+                a = torch.exp(delta.unsqueeze(-1) * A)             # (B,L,E,N)
+                b = delta.unsqueeze(-1) * Bc.unsqueeze(2).float() * x.unsqueeze(-1).float()
+                h = scan(a, b, self.chunk)
+                y = (h * Cc.unsqueeze(2).float()).sum(-1) + self.D.float() * x.float()
         return self.out_proj(y * F.silu(z))
 
 
@@ -497,7 +654,7 @@ def init_weights(model, initializer_range=0.02):
 
 import math
 
-# per-parameter-element FLOPs for one token, relative to a linear of the same width
+# per-parameter-element FLOPs for one byte, relative to a linear of the same width
 LINEAR = 2
 
 # Training costs about three times the forward pass: one forward and two backward. This is
@@ -512,19 +669,19 @@ def model_flops_per_sequence(cfg, seq_len, chunk_len):
     n_chunks = max(seq_len / max(chunk_len, 1.0), 1.0)
     E = cfg.d_state
 
-    # one SSM block: in_proj(z,x) + conv + x_proj + dt_proj + out_proj, per token
-    ssm_tokens = (cfg.n_enc + cfg.n_dec) * seq_len
-    ssm_per_token = D * 2 * D + D * E + D * (D // 16 + 2 * E) + (D // 16) * D + D * D
-    ssm = ssm_tokens * ssm_per_token * LINEAR
+    # one SSM block: in_proj(z,x) + conv + x_proj + dt_proj + out_proj, per byte
+    ssm_bytes = (cfg.n_enc + cfg.n_dec) * seq_len
+    ssm_per_byte = D * 2 * D + D * E + D * (D // 16 + 2 * E) + (D // 16) * D + D * D
+    ssm = ssm_bytes * ssm_per_byte * LINEAR
 
-    # The scan's own arithmetic. The recurrence carries an (E, N) state per token, and the
+    # The scan's own arithmetic. The recurrence carries an (E, N) state per byte, and the
     # chunked scan does log2(chunk) rounds of shifts, multiplies and adds over it. At these
     # widths this is the same order as the block's matmuls, so leaving it out would make the
     # counter disagree with wall-clock by more than the parity tolerance -- which is exactly
     # what the parity gate measures.
     rounds = max(1, int(math.log2(max(cfg.scan_chunk, 2))))
-    scan_per_token = 3.0 * D * E * rounds      # state is (d_model, d_state) per token
-    ssm += ssm_tokens * scan_per_token
+    scan_per_byte = 3.0 * D * E * rounds      # state is (d_model, d_state) per byte
+    ssm += ssm_bytes * scan_per_byte
 
     # router: two projections at byte resolution
     router = seq_len * 2 * D * D * LINEAR
@@ -755,9 +912,16 @@ def main():
     model = HNetLM(cfg).to(DEV)
     init_weights(model)
     global SCAN_IMPL
-    if CFG.get("compile_blocks", True):
-        SCAN_IMPL = "compiled"
+    want = CFG.get("scan_impl") or ("compiled" if CFG.get("compile_blocks", True) else "reference")
+    # Fail loudly rather than falling back: the reference scan is 3.5x slower, and a silent
+    # fallback would burn the whole GPU session instead of stopping in the first second.
+    if want == "triton" and scan_triton is None:
+        raise RuntimeError("config asks for the fused Triton scan but scan_triton did not "
+                           "import; refusing to fall back to the slower reference scan")
+    SCAN_IMPL = want
+    if want == "compiled":
         compile_ssm_blocks(model)
+    log(f"scan implementation: {SCAN_IMPL}")
     mo = float(CFG.get("lr_mult_outer", 1.0))
     mm = float(CFG.get("lr_mult_main", 1.0))
     groups = param_groups(model, mo, mm)
