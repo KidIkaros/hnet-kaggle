@@ -66,12 +66,15 @@ One variable changes from run 1: the budget. Same corpus, geometry, optimiser, s
 The BLT scaling law (bpb proportional to C^-0.206, fitted about 300x above our scale) predicts
 roughly a 13% drop for a doubling of compute. Treat that as a direction, not a promise.
 
-| outcome | criterion vs `baseline_bpb` | reading |
-|---|---|---|
-| **strong** | at least 13% lower | the law holds at our scale; the architecture converts compute into bpb |
-| **success** | 7-13% lower | compute still pays, but the curve is shallower than predicted |
-| **flat** | within 5% | saturated at 18.6M parameters on this corpus |
-| **worse** | more than 5% higher | instability or an invalid comparison, not a result |
+Baseline is measured: **`baseline_bpb` = 1.4900 over 272,093 bytes** (run 1, 1.5e16 nominal,
+39,049 steps, scored on the canonical 40-batch sample). Thresholds are now concrete:
+
+| outcome | criterion | absolute bpb | reading |
+|---|---|---|---|
+| **strong** | at least 13% lower | **<= 1.2963** | the law holds at our scale; the architecture converts compute into bpb |
+| **success** | 7-13% lower | 1.2963 - 1.3857 | compute still pays, but the curve is shallower than predicted |
+| **flat** | within 5% | 1.4155 - 1.5645 | saturated at 18.6M parameters on this corpus |
+| **worse** | more than 5% higher | **> 1.5645** | instability or an invalid comparison, not a result |
 
 ### Branch A — success or strong
 
