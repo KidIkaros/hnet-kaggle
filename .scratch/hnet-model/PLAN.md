@@ -240,6 +240,26 @@ Consequence: a 24M run would sit at ~20 bytes/param -- at the heuristic optimum 
 expected gain over 1.4173 is a few percent, not a step change. The price of that run depends
 entirely on the throughput probe, which is why the probe comes first.
 
+## Postmortem: the "lost 2 hours" (2026-11-01, verified)
+
+Meter readings: 19.96 h at the no-op push (~20:00Z) → 22.43 h when the kernel was deleted
+(00:03Z). The kill had failed. Mechanism, verified live:
+
+1. **`kernels push` does not kill a running session** — the new version queues behind (or runs
+   beside) the old one. The hung GPU probe kept billing for ~2.5 h after we pushed the CPU
+   no-op to "kill" it.
+2. **`kernels status` reports the latest version only.** The 7-second CPU no-op read COMPLETE
+   at 22:11Z while the GPU session underneath stayed live; every later status check also read
+   COMPLETE.
+3. **`kernels delete` is the only reliable CLI kill.** Deleting `hnet-batch-probe2` at 00:03Z
+   stopped the meter within one poll interval (22.43 → 22.43 over 2.5 min).
+
+Rules adopted: (a) every kernel carries a hard watchdog — a daemon thread that `os._exit()`s
+at the deadline, because `signal.alarm` cannot fire while the main thread is stuck in a C/CUDA
+call; (b) never trust status COMPLETE as "session released" — verify with a quota delta; (c)
+kill = delete (`tools/kill_kernel.sh`); (d) CPU sessions are free and capped at 12 h — dataset
+builds, gates and tests go there; GPU kernels self-terminate well before their session cap.
+
 ## Next phase
 
 Designed, not started: `docs/AUDIO_PHASE.md` — LibriSpeech 100 h byte build (free, CPU) then
